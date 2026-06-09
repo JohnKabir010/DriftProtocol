@@ -50,7 +50,8 @@ export class RaceRoom extends Room<RaceState> {
     return jwt.verify(options.ticket, process.env.JWT_ACCESS_SECRET ?? "dev-only") as TicketClaims;
   }
 
-  override onJoin(client: Client, _options: unknown, claims: TicketClaims): void {
+  override onJoin(client: Client, _options: unknown, claims?: TicketClaims): void {
+    if (!claims) throw new Error("unauthenticated join");
     if (this.state.cars.size >= MAX_RACERS) return; // spectator: state-only, no car
     const car = new CarState();
     car.playerId = claims.sub;

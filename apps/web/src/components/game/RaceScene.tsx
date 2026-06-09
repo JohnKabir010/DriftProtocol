@@ -3,6 +3,7 @@
 import { Canvas } from "@react-three/fiber";
 import { Environment, Grid } from "@react-three/drei";
 import { Bloom, ChromaticAberration, EffectComposer } from "@react-three/postprocessing";
+import { Vector2 } from "three";
 import { PlayerCar } from "./PlayerCar";
 import { ChaseCamera } from "./ChaseCamera";
 import { CityBlocks } from "./CityBlocks";
@@ -50,7 +51,11 @@ export default function RaceScene() {
       <Environment preset="night" />
       <EffectComposer>
         <Bloom intensity={1.1} luminanceThreshold={0.25} mipmapBlur />
-        <ChromaticAberration offset={[0.0008, 0.0008]} />
+        <ChromaticAberration
+          offset={new Vector2(0.0008, 0.0008)}
+          radialModulation={false}
+          modulationOffset={0}
+        />
       </EffectComposer>
     </Canvas>
   );

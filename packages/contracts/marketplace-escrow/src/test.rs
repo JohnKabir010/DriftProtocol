@@ -9,7 +9,7 @@ fn setup(env: &Env) -> (Address, Address, MarketplaceEscrowClient<'_>) {
     let asset_admin = Address::generate(env);
     let asset = env.register_stellar_asset_contract_v2(asset_admin.clone());
 
-    let contract_id = env.register(MarketplaceEscrow, ());
+    let contract_id = env.register_contract(None, MarketplaceEscrow);
     let client = MarketplaceEscrowClient::new(env, &contract_id);
     let fee_recipient = Address::generate(env);
     client.init(&usdc.address(), &fee_recipient, &250);
