@@ -6,13 +6,15 @@ import { Group } from "three";
 import {
   SIM_DT,
   Track,
+  type HandlingProfile,
   bankDrift,
   carSpeed,
   collideWithWalls,
   createCarState,
   createProgress,
   poseAtS,
-  stepCar,
+  resolveHandling,
+  stepCarResolved,
   trackQuery,
   updateProgress,
 } from "@drift/shared";
@@ -29,9 +31,17 @@ const TELEMETRY_INTERVAL = 0.1; // seconds between HUD store writes
  * server does, and drives the HUD. The online path replaces only the input
  * source and adds reconciliation — same sim, same track, same renderer.
  */
+/** Derive effective handling from the session store's active car if available. */
+function useHandling(): HandlingProfile {
+  // Default: neutral Class-C profile (no upgrades). When garage store lands
+  // in Phase 3 web integration, this reads from the active car's upgrades.
+  return resolveHandling("c-neon-runner", {});
+}
+
 export function PlayerCar({ track }: { track: Track }) {
   const group = useRef<Group>(null);
   const input = useInput();
+  const handling = useHandling();
 
   const world = useMemo(() => {
     const startPose = poseAtS(track, track.totalLength - 6);
@@ -67,7 +77,7 @@ export function PlayerCar({ track }: { track: Track }) {
       w.accumulator += Math.min(dt, 0.1); // clamp tab-back spikes
       while (w.accumulator >= SIM_DT) {
         w.accumulator -= SIM_DT;
-        stepCar(w.sim, input.current);
+        stepCarResolved(w.sim, input.current, handling);
         collideWithWalls(track, w.sim);
         w.raceTimeMs += SIM_DT * 1000;
         const q = trackQuery(track, w.sim.x, w.sim.z);

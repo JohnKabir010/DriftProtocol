@@ -6,14 +6,13 @@ import { RacesService } from "./races.service";
 export class RacesController {
   constructor(private readonly races: RacesService) {}
 
-  /** Internal endpoint — realtime fleet only, authenticated by service token. */
   @Post("results")
-  async ingest(@Body() body: unknown, @Headers("x-service-token") token?: string): Promise<{ ok: true }> {
+  async ingest(@Body() body: unknown, @Headers("x-service-token") token?: string) {
     if (!token || token !== process.env.REALTIME_SERVICE_TOKEN) {
       throw new ForbiddenException("realtime service token required");
     }
     const report = RaceResultReportSchema.parse(body);
-    await this.races.ingestResult(report);
-    return { ok: true };
+    const rewards = await this.races.ingestResult(report);
+    return { ok: true, rewards };
   }
 }

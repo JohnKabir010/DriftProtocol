@@ -49,9 +49,22 @@ function Results() {
             <span className="text-neon-magenta tabular-nums">{r.driftScore.toLocaleString()} drift</span>
           </div>
         ))}
+        {results[0]?.isLocal && (results[0].creditsEarned || results[0].repEarned) && (
+          <div className="mt-4 flex gap-4 justify-center font-display text-sm">
+            {results[0].creditsEarned && (
+              <span className="text-neon-volt">+₵{results[0].creditsEarned.toLocaleString()} CREDITS</span>
+            )}
+            {results[0].repEarned && (
+              <span className="text-neon-cyan">+{results[0].repEarned} REP</span>
+            )}
+            {results[0].levelUp && (
+              <span className="text-neon-magenta animate-pulse">LEVEL UP!</span>
+            )}
+          </div>
+        )}
         <button
           onClick={() => window.location.reload()}
-          className="mt-8 w-full holo-card py-3 font-display text-neon-volt hover:shadow-neon-cyan transition-shadow"
+          className="mt-6 w-full holo-card py-3 font-display text-neon-volt hover:shadow-neon-cyan transition-shadow"
         >
           RACE AGAIN
         </button>

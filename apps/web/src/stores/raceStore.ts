@@ -9,6 +9,9 @@ export interface RaceResultRow {
   finishTimeMs: number | null;
   driftScore: number;
   isLocal: boolean;
+  creditsEarned?: number;
+  repEarned?: number;
+  levelUp?: boolean;
 }
 
 interface RaceStore {
