@@ -1,0 +1,349 @@
+// Drift Protocol — core schema.
+// Conventions: UUID PKs, money as BIGINT minor units, append-only ledger,
+// every onchain interaction journaled in ChainTx with an idempotency key.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Identity ───────────────────────────────────────────────────────────────
+
+model User {
+  id           String       @id @default(uuid())
+  email        String?      @unique
+  authProvider String // "google" | "discord" | "guest"
+  authSubject  String // provider-scoped subject id
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  player       Player?
+  walletLinks  WalletLink[]
+
+  @@unique([authProvider, authSubject])
+}
+
+/// Optional self-custody wallet (Freighter). Custodial Stellar accounts are
+/// managed server-side and referenced from Player.custodialAccountId.
+model WalletLink {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  publicKey  String   @unique // Stellar G... address
+  verifiedAt DateTime // SEP-10-style challenge completion
+  createdAt  DateTime @default(now())
+}
+
+model Player {
+  id                 String   @id @default(uuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id])
+  handle             String   @unique @db.VarChar(20)
+  level              Int      @default(1)
+  xp                 Int      @default(0)
+  rep                Int      @default(0)
+  repTier            RepTier  @default(STREET)
+  custodialAccountId String? // Stellar account created lazily on first premium action
+  avatarUrl          String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  cars             Car[]
+  raceEntries      RaceParticipant[]
+  ledgerEntries    LedgerEntry[]
+  bets             Bet[]
+  factionMember    FactionMember?
+  listings         MarketListing[]   @relation("seller")
+  reputationEvents ReputationEvent[]
+}
+
+enum RepTier {
+  STREET
+  UNDERGROUND
+  SYNDICATE
+  LEGEND
+}
+
+// ── Garage ─────────────────────────────────────────────────────────────────
+
+model Car {
+  id        String       @id @default(uuid())
+  playerId  String
+  player    Player       @relation(fields: [playerId], references: [id])
+  modelKey  String // references static car catalog (code-defined)
+  carClass  CarClass
+  nickname  String?      @db.VarChar(24)
+  livery    Json // layered decal/wrap/underglow document
+  /// Set when this car is a rare onchain asset (asset_registry token id).
+  onchainId String?      @unique
+  createdAt DateTime     @default(now())
+  upgrades  CarUpgrade[]
+}
+
+enum CarClass {
+  D
+  C
+  B
+  A
+  S
+}
+
+model CarUpgrade {
+  id    String      @id @default(uuid())
+  carId String
+  car   Car         @relation(fields: [carId], references: [id])
+  slot  UpgradeSlot
+  tier  Int // 0..5
+
+  @@unique([carId, slot])
+}
+
+enum UpgradeSlot {
+  ENGINE
+  TRANSMISSION
+  TIRES
+  NITRO
+  ECU
+  WEIGHT
+}
+
+// ── Racing ─────────────────────────────────────────────────────────────────
+
+model Race {
+  id           String            @id @default(uuid())
+  mode         RaceMode
+  trackId      String
+  serverSeed   String // deterministic re-sim for replay/anti-cheat
+  replayHash   String?
+  startedAt    DateTime
+  endedAt      DateTime?
+  validated    Boolean           @default(false) // anti-cheat hold cleared
+  participants RaceParticipant[]
+  betPools     BetPool[]
+  createdAt    DateTime          @default(now())
+
+  @@index([mode, startedAt])
+}
+
+enum RaceMode {
+  SPRINT
+  CIRCUIT
+  DRIFT_TRIAL
+  DUEL
+  FACTION_WAR
+  TOURNAMENT
+}
+
+model RaceParticipant {
+  id             String  @id @default(uuid())
+  raceId         String
+  race           Race    @relation(fields: [raceId], references: [id])
+  playerId       String
+  player         Player  @relation(fields: [playerId], references: [id])
+  carId          String
+  finishPosition Int?
+  finishTimeMs   Int? // null = DNF
+  bestLapMs      Int?
+  driftScore     Int     @default(0)
+  cleanRace      Boolean @default(false)
+
+  @@unique([raceId, playerId])
+  @@index([playerId])
+}
+
+// ── Economy: double-entry Credits ledger ───────────────────────────────────
+// Balances are SUM(amount) per (player, currency); never stored mutable.
+// Every business action posts balanced entries inside one DB transaction.
+
+model LedgerEntry {
+  id             String   @id @default(uuid())
+  playerId       String? // null = house/system account side
+  player         Player?  @relation(fields: [playerId], references: [id])
+  currency       Currency
+  /// Signed minor units. The sum of all rows sharing a journalId is zero.
+  amount         BigInt
+  journalId      String // groups the balanced legs of one transaction
+  reason         String // "RACE_REWARD" | "UPGRADE_PURCHASE" | "BET_STAKE" | ...
+  refType        String? // "race" | "bet" | "listing" | "tournament"
+  refId          String?
+  idempotencyKey String   @unique
+  createdAt      DateTime @default(now())
+
+  @@index([playerId, currency])
+  @@index([journalId])
+}
+
+enum Currency {
+  CREDITS
+  USDC
+}
+
+// ── Betting (pari-mutuel) ──────────────────────────────────────────────────
+
+model BetPool {
+  id        String     @id @default(uuid())
+  raceId    String
+  race      Race       @relation(fields: [raceId], references: [id])
+  kind      String // "WIN" | "PODIUM"
+  currency  Currency
+  status    PoolStatus @default(OPEN)
+  rakeBps   Int        @default(500)
+  closesAt  DateTime // 60s pre-race lock
+  bets      Bet[]
+  createdAt DateTime   @default(now())
+}
+
+enum PoolStatus {
+  OPEN
+  LOCKED
+  SETTLED
+  VOIDED
+}
+
+model Bet {
+  id              String   @id @default(uuid())
+  poolId          String
+  pool            BetPool  @relation(fields: [poolId], references: [id])
+  playerId        String
+  player          Player   @relation(fields: [playerId], references: [id])
+  selectionId     String // playerId being backed
+  stake           BigInt
+  payout          BigInt? // set at settlement
+  createdAt       DateTime @default(now())
+
+  @@index([poolId])
+}
+
+// ── Factions & Districts ───────────────────────────────────────────────────
+
+model Faction {
+  id              String          @id @default(uuid())
+  name            String          @unique @db.VarChar(32)
+  tag             String          @unique @db.VarChar(5)
+  rep             Int             @default(0)
+  /// Soroban faction_treasury contract instance, once deployed for this faction.
+  treasuryContractId String?      @unique
+  members         FactionMember[]
+  districtEpochs  DistrictEpoch[]
+  createdAt       DateTime        @default(now())
+}
+
+model FactionMember {
+  id        String   @id @default(uuid())
+  factionId String
+  faction   Faction  @relation(fields: [factionId], references: [id])
+  playerId  String   @unique
+  player    Player   @relation(fields: [playerId], references: [id])
+  rank      String   @default("PROSPECT") // BOSS | OFFICER | RACER | PROSPECT
+  joinedAt  DateTime @default(now())
+}
+
+model District {
+  id     String          @id @default(uuid())
+  key    String          @unique // "docklands" | "neon-row" | ...
+  name   String
+  epochs DistrictEpoch[]
+}
+
+/// One weekly control epoch; mirrored to district_registry onchain at close.
+model DistrictEpoch {
+  id                 String    @id @default(uuid())
+  districtId         String
+  district           District  @relation(fields: [districtId], references: [id])
+  epochNumber        Int
+  controllingFactionId String?
+  controllingFaction Faction?  @relation(fields: [controllingFactionId], references: [id])
+  influence          Json // { factionId: score }
+  startsAt           DateTime
+  endsAt             DateTime
+  chainTxId          String?   @unique
+
+  @@unique([districtId, epochNumber])
+}
+
+// ── Marketplace & Chain journal ────────────────────────────────────────────
+
+model MarketListing {
+  id               String        @id @default(uuid())
+  sellerId         String
+  seller           Player        @relation("seller", fields: [sellerId], references: [id])
+  assetType        String // "CAR" | "COSMETIC"
+  assetRef         String // Car.id or cosmetic catalog key / onchainId
+  currency         Currency
+  price            BigInt
+  status           ListingStatus @default(ACTIVE)
+  /// Set when the asset is escrowed in marketplace_escrow onchain.
+  escrowEntryId    String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([status, assetType])
+}
+
+enum ListingStatus {
+  ACTIVE
+  FILLED
+  CANCELLED
+}
+
+/// Journal of every Stellar/Soroban interaction. The chain-watcher worker
+/// reconciles SUBMITTED → CONFIRMED/FAILED from RPC events; nothing in the
+/// game blocks on chain reads.
+model ChainTx {
+  id             String      @id @default(uuid())
+  kind           String // "ESCROW_LIST" | "ESCROW_FILL" | "TOURNAMENT_PAYOUT" | "REGISTRY_MINT" | ...
+  txHash         String?     @unique
+  status         ChainStatus @default(PENDING)
+  payload        Json
+  idempotencyKey String      @unique
+  error          String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([status])
+}
+
+enum ChainStatus {
+  PENDING
+  SUBMITTED
+  CONFIRMED
+  FAILED
+}
+
+// ── Seasons / Tournaments / Rep events ─────────────────────────────────────
+
+model Season {
+  id        String   @id @default(uuid())
+  number    Int      @unique
+  startsAt  DateTime
+  endsAt    DateTime
+}
+
+model Tournament {
+  id             String   @id @default(uuid())
+  name           String
+  mode           RaceMode
+  currency       Currency
+  entryFee       BigInt
+  bracketSize    Int
+  status         String   @default("REGISTRATION") // REGISTRATION | LOCKED | RUNNING | SETTLED
+  /// tournament_pool contract instance escrowing USDC entries.
+  poolContractId String?
+  startsAt       DateTime
+  createdAt      DateTime @default(now())
+}
+
+model ReputationEvent {
+  id        String   @id @default(uuid())
+  playerId  String
+  player    Player   @relation(fields: [playerId], references: [id])
+  delta     Int
+  reason    String
+  refId     String?
+  createdAt DateTime @default(now())
+
+  @@index([playerId, createdAt])
+}

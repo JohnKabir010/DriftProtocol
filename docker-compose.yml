@@ -1,0 +1,28 @@
+# Local development infrastructure. Production uses managed Postgres/Redis.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: drift
+      POSTGRES_PASSWORD: drift_dev
+      POSTGRES_DB: drift
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U drift"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redisdata:/data
+
+volumes:
+  pgdata:
+  redisdata:

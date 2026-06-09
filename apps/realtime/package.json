@@ -1,0 +1,27 @@
+{
+  "name": "@drift/realtime",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@colyseus/core": "^0.15.17",
+    "@colyseus/redis-driver": "^0.15.0",
+    "@colyseus/schema": "^2.0.35",
+    "@colyseus/ws-transport": "^0.15.0",
+    "@drift/shared": "workspace:*",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/node": "^22.9.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
+  }
+}
