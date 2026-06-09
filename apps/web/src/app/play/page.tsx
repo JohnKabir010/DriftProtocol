@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { RaceHud } from "@/components/hud/RaceHud";
 
@@ -14,9 +15,17 @@ const RaceScene = dynamic(() => import("@/components/game/RaceScene"), {
 });
 
 export default function PlayPage() {
+  // ?online enables the experimental multiplayer path (needs api+realtime up).
+  // Resolved after mount to avoid an SSR/hydration mismatch on search params.
+  const [online, setOnline] = useState<boolean | null>(null);
+  useEffect(() => {
+    setOnline(new URLSearchParams(window.location.search).has("online"));
+  }, []);
+
+  if (online === null) return null;
   return (
     <main className="relative h-screen w-screen overflow-hidden">
-      <RaceScene />
+      <RaceScene online={online} />
       <RaceHud />
     </main>
   );

@@ -29,7 +29,9 @@ pnpm db:migrate          # Prisma migrations
 pnpm dev                 # web :3000 · api :4000 · realtime :2567
 ```
 
-Open http://localhost:3000 → **RACE NOW**. WASD to drive, Space handbrake, Shift nitro.
+Open http://localhost:3000 → **RACE NOW**. W throttle, A/D steer, S brake, Space handbrake (drift), Shift nitro. Drift chains bank into nitro bottles; 2 laps of Neon Row Circuit.
+
+`/play` runs the full race loop offline (same sim the server runs). `/play?online` joins a server-authoritative room via guest auth + matchmaking ticket (requires api + realtime up). Realtime E2E check: `pnpm --filter @drift/realtime smoke` (with the realtime server running).
 
 Contracts (requires Rust + stellar-cli):
 
@@ -52,7 +54,7 @@ stellar contract build                       # wasm for testnet deploy
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Monorepo, auth, ledger, matchmaking tickets, RaceRoom, 3D scene | ✅ scaffolded |
-| 2 | Rapier vehicle physics, drift/nitro, prediction+reconciliation, tracks | next |
+| 2 | Shared deterministic car sim (drift/nitro), track+checkpoints+laps, server-authoritative race loop, client prediction & reconciliation, track rendering, HUD | ✅ done (17 sim tests + live server smoke) |
 | 3 | Matchmaking loop, garage, upgrades, betting (Credits), profiles | planned |
 | 4 | Factions, districts, marketplace, treasuries | planned |
 | 5 | Soroban testnet: escrow, registries, tournament pools, Freighter | escrow contract done |

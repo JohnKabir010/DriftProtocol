@@ -1,58 +1,121 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Group } from "three";
-import { BASE_CAR } from "@drift/shared";
+import {
+  SIM_DT,
+  Track,
+  bankDrift,
+  carSpeed,
+  collideWithWalls,
+  createCarState,
+  createProgress,
+  poseAtS,
+  stepCar,
+  trackQuery,
+  updateProgress,
+} from "@drift/shared";
 import { useInput } from "@/game/useInput";
 import { useRaceStore } from "@/stores/raceStore";
+import { CarBody } from "./CarBody";
+
+const COUNTDOWN_MS = 3000;
+const TELEMETRY_INTERVAL = 0.1; // seconds between HUD store writes
 
 /**
- * Local player car. Runs the same kinematic model as the server's Phase-1
- * RaceRoom.integrateCar so prediction/reconciliation stays trivial. The
- * placeholder box geometry swaps for a GLTF model without touching logic.
+ * Local (offline) race controller: runs the shared deterministic sim in a
+ * fixed-step accumulator, enforces walls/checkpoints/laps exactly like the
+ * server does, and drives the HUD. The online path replaces only the input
+ * source and adds reconciliation — same sim, same track, same renderer.
  */
-export function PlayerCar() {
+export function PlayerCar({ track }: { track: Track }) {
   const group = useRef<Group>(null);
   const input = useInput();
-  const sim = useRef({ speed: 0, yaw: 0 });
+
+  const world = useMemo(() => {
+    const startPose = poseAtS(track, track.totalLength - 6);
+    const sim = createCarState(startPose.x, startPose.z, startPose.yaw);
+    return {
+      sim,
+      progress: createProgress(trackQuery(track, sim.x, sim.z).s),
+      accumulator: 0,
+      raceTimeMs: 0,
+      telemetryTimer: 0,
+      finished: false,
+    };
+  }, [track]);
+
+  // Race start sequence: brief countdown, then green light.
+  useEffect(() => {
+    const store = useRaceStore.getState();
+    store.reset();
+    store.patch({
+      phase: "COUNTDOWN",
+      countdownEndsAt: Date.now() + COUNTDOWN_MS,
+      totalLaps: track.def.laps,
+    });
+    const timer = setTimeout(() => useRaceStore.getState().patch({ phase: "RACING" }), COUNTDOWN_MS);
+    return () => clearTimeout(timer);
+  }, [track]);
 
   useFrame((_, dt) => {
-    const clamped = Math.min(dt, 1 / 20); // avoid tunneling on tab-back
-    const { throttle, brake, steer } = input.current;
-    const s = sim.current;
+    const store = useRaceStore.getState();
+    const w = world;
 
-    const accel = (throttle * BASE_CAR.engineForce - brake * BASE_CAR.brakeForce) / BASE_CAR.mass;
-    s.speed = Math.min(Math.max(s.speed + accel * clamped - s.speed * 0.3 * clamped, 0), BASE_CAR.maxSpeed);
+    if (store.phase === "RACING" && !w.finished) {
+      w.accumulator += Math.min(dt, 0.1); // clamp tab-back spikes
+      while (w.accumulator >= SIM_DT) {
+        w.accumulator -= SIM_DT;
+        stepCar(w.sim, input.current);
+        collideWithWalls(track, w.sim);
+        w.raceTimeMs += SIM_DT * 1000;
+        const q = trackQuery(track, w.sim.x, w.sim.z);
+        updateProgress(track, w.progress, q.s, w.raceTimeMs);
+        if (w.progress.finished) {
+          w.finished = true;
+          bankDrift(w.sim);
+          store.patch({
+            phase: "FINISHED",
+            driftScore: Math.round(w.sim.driftScore),
+            results: [
+              {
+                handle: "you",
+                position: 1,
+                finishTimeMs: w.progress.finishTimeMs,
+                driftScore: Math.round(w.sim.driftScore),
+                isLocal: true,
+              },
+            ],
+          });
+        }
+      }
+    }
 
-    const steerAngle =
-      BASE_CAR.steerAngleLowSpeed +
-      (BASE_CAR.steerAngleHighSpeed - BASE_CAR.steerAngleLowSpeed) * (s.speed / BASE_CAR.maxSpeed);
-    if (s.speed > 1) s.yaw += steer * steerAngle * clamped * 2.2;
-
+    // Apply sim → visuals every render frame.
     const g = group.current;
-    if (!g) return;
-    g.rotation.y = s.yaw;
-    g.position.x += Math.sin(s.yaw) * s.speed * clamped;
-    g.position.z += Math.cos(s.yaw) * s.speed * clamped;
-    // Visual-only body roll into the turn.
-    g.rotation.z = -steer * Math.min(s.speed / BASE_CAR.maxSpeed, 1) * 0.12;
+    if (g) {
+      g.position.set(w.sim.x, 0, w.sim.z);
+      g.rotation.y = w.sim.yaw;
+      g.rotation.z = -input.current.steer * Math.min(carSpeed(w.sim) / 40, 1) * 0.1; // body roll
+    }
 
-    useRaceStore.getState().setTelemetry({ speedKmh: s.speed * 3.6 });
+    // Throttled HUD telemetry (10Hz — don't re-render React at 60fps).
+    w.telemetryTimer += dt;
+    if (w.telemetryTimer >= TELEMETRY_INTERVAL && !w.finished) {
+      w.telemetryTimer = 0;
+      store.patch({
+        speedKmh: carSpeed(w.sim) * 3.6,
+        boosting: w.sim.nitroMs > 0,
+        nitroBottles: w.sim.bottles,
+        nitroCharge: w.sim.nitroCharge,
+        driftChain: Math.round(w.sim.driftChain),
+        driftScore: Math.round(w.sim.driftScore),
+        lap: Math.min(w.progress.lap + 1, track.def.laps),
+        raceTimeMs: Math.round(w.raceTimeMs),
+      });
+    }
   });
 
-  return (
-    <group ref={group} name="player-car">
-      <mesh position={[0, 0.5, 0]} castShadow>
-        <boxGeometry args={[1.9, 0.7, 4.2]} />
-        <meshStandardMaterial color="#101622" roughness={0.2} metalness={0.9} />
-      </mesh>
-      {/* Neon underglow + tail lights */}
-      <pointLight position={[0, 0.15, 0]} color="#00f0ff" intensity={6} distance={5} />
-      <mesh position={[0, 0.55, -2.11]}>
-        <boxGeometry args={[1.6, 0.12, 0.05]} />
-        <meshStandardMaterial emissive="#ff2e97" emissiveIntensity={4} color="#000" />
-      </mesh>
-    </group>
-  );
+  return <CarBody ref={group} name="player-car" />;
 }

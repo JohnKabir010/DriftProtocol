@@ -19,9 +19,19 @@ export const BASE_CAR = {
   steerAngleLowSpeed: 0.55, // rad
   steerAngleHighSpeed: 0.18, // rad
   lateralGrip: 9.5, // slip-curve peak coefficient
-  /** Grip multiplier while handbrake is held — the drift entry lever. */
-  handbrakeGripFactor: 0.45,
+  /** Grip multiplier while handbrake is held — the drift entry lever.
+   * Steady-state slip ≈ atan(vR/vF); this value puts a full-lock handbrake
+   * turn at ~25° slip, inside the [15°, 65°] drift-scoring window. */
+  handbrakeGripFactor: 0.22,
   downforcePerSpeed: 18, // N per m/s
+  /** Quadratic drag (m/s² per (m/s)²): sets the natural top speed. */
+  dragCoeff: 0.0035,
+  /** Constant rolling resistance, m/s². */
+  rollingResist: 0.8,
+  /** Steering responsiveness multiplier (yaw rate = steer × angle × gain). */
+  steerGain: 2.0,
+  /** Extra yaw authority while the handbrake is down (drift initiation). */
+  handbrakeYawBoost: 1.6,
 } as const;
 
 export const NITRO = {

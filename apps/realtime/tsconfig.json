@@ -4,6 +4,9 @@
     "module": "CommonJS",
     "moduleResolution": "Node",
     "experimentalDecorators": true,
+    // @colyseus/schema installs prototype accessors via @type; ES2022 class
+    // fields would shadow them with own properties and break state sync.
+    "useDefineForClassFields": false,
     "outDir": "dist"
   },
   "include": ["src"]

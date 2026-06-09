@@ -1,3 +1,4 @@
+import "dotenv/config";
 import http from "node:http";
 import { Server } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
