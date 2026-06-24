@@ -1,6 +1,4 @@
-node_modules
-apps/api
-apps/realtime
+**/node_modules
 packages/contracts/target
 **/.turbo
 **/dist
@@ -9,3 +7,4 @@ packages/contracts/target
 *.log
 .env
 .env.local
+.git
