@@ -9,9 +9,41 @@ import {
   trackQuery,
   updateProgress,
 } from "./track.js";
-import { NEON_ROW_CIRCUIT } from "./tracks.js";
+import { NEON_ROW_CIRCUIT, TRACKS } from "./tracks.js";
 
 const track = buildTrack(NEON_ROW_CIRCUIT);
+
+describe("track catalog", () => {
+  for (const [id, def] of Object.entries(TRACKS)) {
+    it(`${id} builds a valid, race-ready loop`, () => {
+      const t = buildTrack(def);
+      expect(def.id).toBe(id);
+      expect(t.totalLength).toBeGreaterThan(400); // long enough to race
+      expect(def.width).toBeGreaterThanOrEqual(10); // wide enough for 2-abreast
+      expect(def.laps).toBeGreaterThanOrEqual(1);
+      expect(t.checkpoints).toHaveLength(def.checkpointCount);
+      expect(t.checkpoints[t.checkpoints.length - 1]).toBeCloseTo(t.totalLength, 6);
+      // Checkpoints strictly ascending.
+      for (let i = 1; i < t.checkpoints.length; i++) {
+        expect(t.checkpoints[i]!).toBeGreaterThan(t.checkpoints[i - 1]!);
+      }
+      // The centerline never self-pinches: every sample's nearest centerline
+      // point is itself (within the sampling tolerance), so walls are sane.
+      for (let i = 0; i < t.samples.length; i += 7) {
+        const s = t.samples[i]!;
+        const q = trackQuery(t, s.x, s.z);
+        expect(Math.abs(q.lateral)).toBeLessThan(1);
+      }
+      // Grid placement works everywhere a start slot could land.
+      for (let slot = 0; slot < 8; slot++) {
+        const startS = t.totalLength - 6 - Math.floor(slot / 2) * 7;
+        const pose = poseAtS(t, startS);
+        expect(Number.isFinite(pose.x)).toBe(true);
+        expect(Number.isFinite(pose.yaw)).toBe(true);
+      }
+    });
+  }
+});
 
 describe("track", () => {
   it("builds a closed loop with checkpoints ending at the lap line", () => {

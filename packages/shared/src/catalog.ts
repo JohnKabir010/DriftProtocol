@@ -32,13 +32,15 @@ export interface CarModel {
   handling: HandlingProfile;
 }
 
-const NEUTRAL: HandlingProfile = {
+/** Identity profile — stepCarResolved with this matches the stock BASE_CAR sim exactly. */
+export const NEUTRAL_HANDLING: HandlingProfile = {
   engineMult: 1,
   gripMult: 1,
   dragMult: 1,
   driftEntryMult: 1,
   nitroMult: 1,
 };
+const NEUTRAL = NEUTRAL_HANDLING;
 
 export const CAR_CATALOG: Record<string, CarModel> = {
   // ── Class D (starters) ──────────────────────────────────────────────────
@@ -213,7 +215,7 @@ export function resolveHandling(
 
   const p = { ...model.handling };
   for (const [slot, tier] of Object.entries(upgrades) as [UpgradeSlot, number][]) {
-    const mods = UPGRADE_TABLES[slot][tier];
+    const mods = UPGRADE_TABLES[slot]?.[tier]; // unknown slots/tiers are ignored
     if (!mods) continue;
     for (const [k, delta] of Object.entries(mods) as [keyof SlotMods, number][]) {
       (p[k] as number) += delta;

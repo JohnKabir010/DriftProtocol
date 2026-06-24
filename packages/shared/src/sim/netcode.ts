@@ -4,8 +4,10 @@
  * cars. Pure logic (no transport, no rendering) so it's unit-testable.
  */
 
-import { CarInput, CarSimState, cloneCarState, stepCar } from "./carSim.js";
+import { CarInput, CarSimState, cloneCarState } from "./carSim.js";
 import { collideWithWalls, Track } from "./track.js";
+import { NEUTRAL_HANDLING, type HandlingProfile } from "../catalog.js";
+import { stepCarResolved } from "./resolvedSim.js";
 
 interface PredictedFrame {
   seq: number;
@@ -23,14 +25,20 @@ export class PredictionBuffer {
   private history: PredictedFrame[] = [];
   private seq = 0;
 
-  constructor(initial: CarSimState, private readonly track: Track) {
+  constructor(
+    initial: CarSimState,
+    private readonly track: Track,
+    /** Must match the profile the server resolved from the same ticket,
+     * or reconciliation will rewind every frame. */
+    private readonly profile: HandlingProfile = NEUTRAL_HANDLING,
+  ) {
     this.state = cloneCarState(initial);
   }
 
   /** Advance one local tick; returns the seq to stamp on the outgoing frame. */
   step(input: CarInput): number {
     this.seq += 1;
-    stepCar(this.state, input);
+    stepCarResolved(this.state, input, this.profile);
     collideWithWalls(this.track, this.state);
     this.history.push({ seq: this.seq, input, after: cloneCarState(this.state) });
     if (this.history.length > MAX_HISTORY) this.history.shift();
@@ -60,7 +68,7 @@ export class PredictionBuffer {
     // Rewind: adopt server truth, replay pending inputs on top.
     this.state = cloneCarState(server);
     for (const frame of this.history) {
-      stepCar(this.state, frame.input);
+      stepCarResolved(this.state, frame.input, this.profile);
       collideWithWalls(this.track, this.state);
       frame.after = cloneCarState(this.state);
     }

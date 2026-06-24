@@ -18,7 +18,9 @@ export function stepCarResolved(
   const engineForce = BASE_CAR.engineForce * h.engineMult;
   const lateralGrip = BASE_CAR.lateralGrip * h.gripMult;
   const dragCoeff = BASE_CAR.dragCoeff * h.dragMult;
-  const handbrakeGrip = BASE_CAR.handbrakeGripFactor * h.driftEntryMult;
+  // driftEntryMult > 1 = enters drifts EASIER, i.e. sheds more grip under
+  // handbrake — so it divides the retained-grip factor rather than multiplying.
+  const handbrakeGrip = BASE_CAR.handbrakeGripFactor / h.driftEntryMult;
   const boostMult = NITRO.boostAccelMultiplier * h.nitroMult;
 
   // ── Nitro ─────────────────────────────────────────────────────────────

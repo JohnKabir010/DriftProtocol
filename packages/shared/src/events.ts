@@ -35,7 +35,12 @@ export interface ServerMessages {
   "input.ack": { seq: number; tick: number };
   "race.result": {
     raceId: string;
-    standings: Array<{ playerId: string; position: number; finishTimeMs: number | null }>;
+    standings: Array<{
+      playerId: string; // empty string = AI driver
+      handle: string;
+      position: number;
+      finishTimeMs: number | null;
+    }>;
   };
   "chat.msg": { playerId: string; handle: string; text: string };
   "system.kick": { reason: string };

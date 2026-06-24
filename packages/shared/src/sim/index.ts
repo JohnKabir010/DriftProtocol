@@ -3,3 +3,4 @@ export * from "./track.js";
 export * from "./tracks.js";
 export * from "./netcode.js";
 export * from "./resolvedSim.js";
+export * from "./botDriver.js";

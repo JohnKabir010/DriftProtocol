@@ -7,6 +7,15 @@
 
 import { CarSimState, dropDrift } from "./carSim.js";
 
+/** Visual environment family. Pure rendering metadata — never affects the sim. */
+export type TrackTheme =
+  | "neon-city"
+  | "rain-city"
+  | "mountain"
+  | "forest"
+  | "hills"
+  | "canyon";
+
 export interface TrackDef {
   id: string;
   name: string;
@@ -16,6 +25,8 @@ export interface TrackDef {
   laps: number;
   checkpointCount: number;
   samplesPerSegment: number;
+  /** Environment family used by the client renderer. Defaults to "neon-city". */
+  theme?: TrackTheme;
 }
 
 export interface TrackSample {
