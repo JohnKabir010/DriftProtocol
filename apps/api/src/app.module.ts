@@ -1,7 +1,8 @@
-import { Module } from "@nestjs/common";
+import { Module, MiddlewareConsumer, NestModule } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
 import { APP_GUARD } from "@nestjs/core";
+import { RequestIdMiddleware } from "./common/request-id.middleware";
 import { PrismaModule } from "./prisma/prisma.module";
 import { InfraModule } from "./infra/infra.module";
 import { HealthModule } from "./health/health.module";
@@ -44,4 +45,8 @@ import { BettingModule } from "./betting/betting.module";
     BettingModule,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(RequestIdMiddleware).forRoutes("*");
+  }
+}
