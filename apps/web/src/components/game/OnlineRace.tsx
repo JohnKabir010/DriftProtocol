@@ -7,6 +7,8 @@ import { SIM_DT, Track, carSpeed } from "@drift/shared";
 import { OnlineSession } from "@/game/onlineSession";
 import { useInput } from "@/game/useInput";
 import { useRaceStore } from "@/stores/raceStore";
+import { useSessionStore } from "@/stores/sessionStore";
+import { api } from "@/lib/api";
 import { CarBody } from "./CarBody";
 
 /** Local predicted car: steps the shared sim each fixed tick, ships inputs. */
@@ -66,19 +68,26 @@ function RemoteCar({ session, id }: { session: OnlineSession; id: string }) {
 
 /**
  * Online race entry point: connects (guest auth → ticket → room), renders
- * the predicted local car and interpolated remote cars. Experimental in
- * Phase 2 — the local mode is the primary play path until matchmaking ships.
+ * the predicted local car and interpolated remote cars.
  */
-export function OnlineRace({ track }: { track: Track }) {
+export function OnlineRace({ track, difficulty }: { track: Track; difficulty?: "easy" | "medium" | "hard" }) {
   const [session, setSession] = useState<OnlineSession | null>(null);
   const [remoteIds, setRemoteIds] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const preRaceCreditsRef = useRef<number>(0);
+  const rewardsApplied = useRef(false);
+  const phase = useRaceStore((s) => s.phase);
 
   useEffect(() => {
     let active = true;
     let connected: OnlineSession | null = null;
+    rewardsApplied.current = false;
+    preRaceCreditsRef.current = Number(useSessionStore.getState().profile?.credits ?? 0);
+    setError(null);
     useRaceStore.getState().reset();
+    useRaceStore.getState().patch({ trackName: track.def.name });
 
-    OnlineSession.connect(track)
+    OnlineSession.connect(track, difficulty ? { difficulty } : undefined)
       .then((s) => {
         if (!active) return s.leave();
         connected = s;
@@ -86,15 +95,54 @@ export function OnlineRace({ track }: { track: Track }) {
         setSession(s);
         s.ready();
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
+        if (!active) return;
+        const msg = err instanceof Error ? err.message : "Connection failed";
         console.error("[online] connect failed — is the api+realtime stack up?", err);
+        setError(msg);
       });
 
     return () => {
       active = false;
       connected?.leave();
     };
-  }, [track]);
+  }, [track, difficulty]);
+
+  // After the race finishes, fetch updated profile to compute credit reward delta.
+  useEffect(() => {
+    if (phase !== "FINISHED" || rewardsApplied.current) return;
+    rewardsApplied.current = true;
+
+    const applyRewards = async () => {
+      // Give the API 1.5 s to process the result report before fetching.
+      await new Promise<void>((r) => setTimeout(r, 1500));
+      try {
+        const updated = await api.players.me();
+        useSessionStore.getState().setProfile(updated);
+        const earned = Number(updated.credits) - preRaceCreditsRef.current;
+        if (earned > 0) {
+          const results = useRaceStore.getState().results;
+          if (results) {
+            useRaceStore.getState().patch({
+              results: results.map((r) => (r.isLocal ? { ...r, creditsEarned: earned } : r)),
+            });
+          }
+        }
+      } catch {
+        // Non-critical — results still show without reward numbers
+      }
+    };
+    void applyRewards();
+  }, [phase]);
+
+  if (error) {
+    return (
+      <mesh position={[0, 0.5, 0]}>
+        <boxGeometry args={[2, 1, 0.1]} />
+        <meshBasicMaterial color="#ff2e97" />
+      </mesh>
+    );
+  }
 
   if (!session) return null;
   return (

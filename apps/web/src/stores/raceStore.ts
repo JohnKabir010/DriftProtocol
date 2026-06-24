@@ -17,6 +17,7 @@ export interface RaceResultRow {
 interface RaceStore {
   phase: RacePhase;
   countdownEndsAt: number | null;
+  trackName: string;
   // Telemetry (written by the sim loop at ~10Hz, read by the HUD)
   speedKmh: number;
   boosting: boolean;
@@ -35,6 +36,7 @@ interface RaceStore {
 const initial = {
   phase: "WAITING" as RacePhase,
   countdownEndsAt: null,
+  trackName: "",
   speedKmh: 0,
   boosting: false,
   nitroBottles: 3,

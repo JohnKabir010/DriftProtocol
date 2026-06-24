@@ -2,6 +2,9 @@
 
 import { useEffect, useRef, type MutableRefObject } from "react";
 
+/** Module-level singleton so TouchControls and the game loop share one object. */
+export const sharedInput: InputSnapshot = { steer: 0, throttle: 0, brake: 0, handbrake: false, nitro: false };
+
 export interface InputSnapshot {
   steer: number; // [-1, 1]
   throttle: number; // [0, 1]
@@ -16,7 +19,7 @@ export interface InputSnapshot {
  * touch backends plug into the same snapshot shape later.
  */
 export function useInput(): MutableRefObject<InputSnapshot> {
-  const state = useRef<InputSnapshot>({ steer: 0, throttle: 0, brake: 0, handbrake: false, nitro: false });
+  const state = useRef<InputSnapshot>(sharedInput);
   const keys = useRef(new Set<string>());
 
   useEffect(() => {
