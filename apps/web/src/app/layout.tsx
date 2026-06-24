@@ -21,7 +21,27 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "Drift Protocol — Underground Racing, Neo-Meridian",
-  description: "Web-based multiplayer cyberpunk street racing. Own the night.",
+  description:
+    "Web-based multiplayer cyberpunk street racing with Stellar blockchain economy. Own your car. Earn your rep. Control the district.",
+  keywords: ["cyberpunk", "racing", "blockchain", "Stellar", "multiplayer", "NFT", "web3"],
+  authors: [{ name: "Drift Protocol Team" }],
+  openGraph: {
+    title: "Drift Protocol",
+    description: "Street racing, real stakes. Own your car. Earn your rep. Control the district.",
+    type: "website",
+    locale: "en_US",
+    siteName: "Drift Protocol",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Drift Protocol — Underground Racing",
+    description: "Cyberpunk multiplayer street racing powered by Stellar blockchain.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true },
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
