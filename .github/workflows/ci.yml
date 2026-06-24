@@ -2,34 +2,276 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, staging, develop]
   pull_request:
+    branches: [main, staging]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PNPM_VERSION: "9"
+  NODE_VERSION: "22"
+
+# ── CI jobs run sequentially: lint → typecheck → test → build → contracts ──
 
 jobs:
-  ts:
+  # ── Job 1: Install + Lint ──────────────────────────────────────────────────
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+
       - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @drift/api exec prisma generate
-      - run: pnpm typecheck
-      - run: pnpm test
-      - run: pnpm build
 
-  contracts:
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared packages
+        run: pnpm --filter @drift/shared build
+
+      - name: Lint API
+        run: pnpm --filter @drift/api lint
+        continue-on-error: false
+
+      - name: Lint Web
+        run: pnpm --filter @drift/web lint
+        continue-on-error: false
+
+  # ── Job 2: Typecheck ───────────────────────────────────────────────────────
+  typecheck:
+    name: Typecheck
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared packages
+        run: pnpm --filter @drift/shared build
+
+      - name: Typecheck shared
+        run: pnpm --filter @drift/shared typecheck
+
+      - name: Typecheck API
+        run: pnpm --filter @drift/api typecheck
+        env:
+          DATABASE_URL: postgresql://drift:drift@localhost:5432/drift
+
+      - name: Typecheck realtime
+        run: pnpm --filter @drift/realtime typecheck
+
+      - name: Typecheck web
+        run: pnpm --filter @drift/web typecheck
+
+  # ── Job 3: Smart Contract Tests (parallel, no DB needed) ──────────────────
+  contracts:
+    name: Soroban contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: packages/contracts
     steps:
       - uses: actions/checkout@v4
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
-      - run: cargo test
-      - run: cargo build --target wasm32-unknown-unknown --release
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/contracts
+
+      - name: Run contract unit tests
+        run: cargo test -- --nocapture
+
+      - name: Build WASM artifact
+        run: cargo build --target wasm32-unknown-unknown --release
+
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: soroban-wasm
+          path: packages/contracts/target/wasm32-unknown-unknown/release/*.wasm
+          retention-days: 30
+
+  # ── Job 4: Backend + Shared Tests ─────────────────────────────────────────
+  test-backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: typecheck
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: drift_test
+          POSTGRES_USER: drift
+          POSTGRES_PASSWORD: drift_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://drift:drift_test@localhost:5432/drift_test
+      REDIS_URL: redis://localhost:6379
+      JWT_ACCESS_SECRET: ci-test-secret-at-least-16-chars
+      REALTIME_SERVICE_TOKEN: ci-realtime-token
+      STELLAR_MASTER_SEED: "0000000000000000000000000000000000000000000000000000000000000001"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared packages
+        run: pnpm --filter @drift/shared build
+
+      - name: Generate Prisma client
+        run: pnpm --filter @drift/api exec prisma generate
+
+      - name: Run database migrations (test DB)
+        run: pnpm --filter @drift/api exec prisma migrate deploy
+
+      - name: Run shared package tests
+        run: pnpm --filter @drift/shared test
+
+      - name: Run API unit tests
+        run: pnpm --filter @drift/api test
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-test-results
+          path: apps/api/coverage/
+          retention-days: 7
+
+  # ── Job 5: Frontend Tests ──────────────────────────────────────────────────
+  test-frontend:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: typecheck
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared packages
+        run: pnpm --filter @drift/shared build
+
+      - name: Run frontend unit tests (Vitest)
+        run: pnpm --filter @drift/web test
+
+  # ── Job 6: Build artifacts ─────────────────────────────────────────────────
+  build:
+    name: Build all services
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [test-backend, test-frontend]
+    env:
+      DATABASE_URL: postgresql://drift:drift@localhost:5432/drift
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared packages
+        run: pnpm --filter @drift/shared build
+
+      - name: Generate Prisma client
+        run: pnpm --filter @drift/api exec prisma generate
+
+      - name: Build API
+        run: pnpm --filter @drift/api build
+
+      - name: Build realtime server
+        run: pnpm --filter @drift/realtime build
+
+      - name: Build web (Next.js)
+        run: pnpm --filter @drift/web build
+        env:
+          NEXT_PUBLIC_API_URL: http://api:4000
+          NEXT_PUBLIC_REALTIME_URL: ws://realtime:2567
+
+      - name: Upload API build
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-dist
+          path: apps/api/dist/
+          retention-days: 7
+
+      - name: Upload web build
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-build
+          path: apps/web/.next/
+          retention-days: 7

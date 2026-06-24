@@ -1,0 +1,81 @@
+name: Deploy → Staging
+
+on:
+  push:
+    branches: [staging]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false   # never cancel a deploy mid-flight
+
+jobs:
+  deploy:
+    name: Build & deploy to Railway staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "9"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared packages
+        run: pnpm --filter @drift/shared build
+
+      - name: Typecheck (gate before deploy)
+        run: pnpm -r exec tsc --noEmit
+        env:
+          # Dummy DB URL so Prisma generate works without a live DB
+          DATABASE_URL: postgresql://drift:drift@localhost:5432/drift
+
+      # Deploy each service to Railway using the CLI.
+      # RAILWAY_TOKEN must be set in the GitHub environment secrets.
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy API
+        run: railway up --service drift-api --detach
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Deploy Realtime
+        run: railway up --service drift-realtime --detach
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Deploy Web
+        run: railway up --service drift-web --detach
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Wait for API health
+        run: |
+          echo "Waiting for staging API health..."
+          for i in $(seq 1 24); do
+            STATUS=$(curl -sf "${{ vars.STAGING_API_URL }}/v1/health" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status',''))" 2>/dev/null || echo "")
+            if [ "$STATUS" = "ok" ]; then
+              echo "API healthy after ${i}×5s"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "API did not become healthy in time"
+          exit 1
+
+      - name: Smoke test — guest auth
+        run: |
+          TOKEN=$(curl -sf -X POST "${{ vars.STAGING_API_URL }}/v1/auth/guest" | python3 -c "import sys,json; print(json.load(sys.stdin)['accessToken'])")
+          if [ -z "$TOKEN" ]; then echo "Guest auth failed"; exit 1; fi
+          echo "Guest auth OK (token length ${#TOKEN})"
