@@ -1,4 +1,5 @@
 import { BadRequestException, Controller, Get, Param, Post, Query, Res } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import { JwtService } from "@nestjs/jwt";
 import type { Response } from "express";
 import { z } from "zod";
@@ -21,7 +22,8 @@ export class AuthController {
     private readonly jwt: JwtService,
   ) {}
 
-  /** Instant play — no signup friction. */
+  /** Instant play — no signup friction. Rate-limited to 10/min to prevent session farming. */
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post("guest")
   async guest(): Promise<SessionTokens> {
     return this.auth.createGuestSession();
