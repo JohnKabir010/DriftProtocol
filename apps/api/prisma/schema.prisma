@@ -135,6 +135,7 @@ enum RaceMode {
   DUEL
   FACTION_WAR
   TOURNAMENT
+  BOT_RACE
 }
 
 model RaceParticipant {

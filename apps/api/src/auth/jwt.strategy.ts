@@ -11,9 +11,14 @@ export interface JwtPayload {
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor() {
+    const secret = process.env.JWT_ACCESS_SECRET;
+    if (!secret || secret.length < 16) {
+      // Fail closed: a guessable signing key lets anyone forge sessions.
+      throw new Error("JWT_ACCESS_SECRET must be set (>=16 chars) before the API can start");
+    }
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      secretOrKey: process.env.JWT_ACCESS_SECRET ?? "dev-only",
+      secretOrKey: secret,
     });
   }
 

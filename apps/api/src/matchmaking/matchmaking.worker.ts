@@ -1,6 +1,9 @@
-import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import Redis from "ioredis";
-import { RaceMode, CarClass } from "@drift/shared";
+import { RaceMode, CarClass, TRACKS, TicketCar } from "@drift/shared";
+import { PrismaService } from "../prisma/prisma.service";
+import { BettingService } from "../betting/betting.service";
+import { RedisService } from "../infra/redis.service";
 import { MatchmakingService } from "./matchmaking.service";
 
 const MODES: RaceMode[] = ["SPRINT", "CIRCUIT", "DRIFT_TRIAL"];
@@ -19,21 +22,37 @@ const TICK_MS = 2_000;
  * don't race on the same queues.
  */
 @Injectable()
-export class MatchmakingWorker implements OnModuleInit {
+export class MatchmakingWorker implements OnModuleInit, OnModuleDestroy {
   private readonly redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379");
   private readonly logger = new Logger(MatchmakingWorker.name);
+  private stopped = false;
 
-  constructor(private readonly mm: MatchmakingService) {}
+  constructor(
+    private readonly mm: MatchmakingService,
+    private readonly prisma: PrismaService,
+    private readonly betting: BettingService,
+    private readonly redisLock: RedisService,
+  ) {}
 
   onModuleInit(): void {
     void this.tick();
   }
 
+  async onModuleDestroy(): Promise<void> {
+    this.stopped = true;
+    await this.redis.quit().catch(() => undefined);
+  }
+
   private async tick(): Promise<void> {
-    while (true) {
+    while (!this.stopped) {
       await new Promise((r) => setTimeout(r, TICK_MS));
+      if (this.stopped) return;
       try {
-        await this.scan();
+        // Leader lock: zrange→zrem isn't atomic, so two replicas scanning the
+        // same queues would form duplicate rooms from the same players.
+        if (await this.redisLock.tryLock("mm-scan", TICK_MS)) {
+          await this.scan();
+        }
       } catch (err) {
         this.logger.error("matchmaking tick failed", err);
       }
@@ -78,16 +97,46 @@ export class MatchmakingWorker implements OnModuleInit {
     // Remove matched players from the queue.
     await this.redis.zrem(key, ...selected.map((p) => p.id));
 
+    // Same track for everyone in the room; rotate across the catalog.
+    const trackIds = Object.keys(TRACKS);
+    const trackId = trackIds[Math.floor(Math.random() * trackIds.length)]!;
+
+    // Resolve every entrant's car + handle (signed into their tickets).
+    const entrants = new Map<string, { car: TicketCar; handle: string }>();
+    for (const p of selected) entrants.set(p.id, await this.mm.entrantFor(p.id));
+
+    // Pre-create the Race + participants so spectators can bet on it before
+    // the green light. The realtime room reports results under this raceId.
+    const raceId = crypto.randomUUID();
+    await this.prisma.race.create({
+      data: {
+        id: raceId,
+        mode,
+        trackId,
+        serverSeed: roomId,
+        startedAt: new Date(),
+        participants: {
+          create: selected.map((p) => ({
+            playerId: p.id,
+            carId: entrants.get(p.id)!.car.carId,
+          })),
+        },
+      },
+    });
+    await this.betting.openPoolsForRace(raceId);
+
     // Issue tickets and publish them via Redis so the client polling can pick up.
+    // Every ticket carries the bot count; the room spawns them at countdown.
     for (const p of selected) {
-      const ticket = this.mm.issueTicket(p.id, roomId, mode, carClass);
+      const e = entrants.get(p.id)!;
+      const ticket = this.mm.issueTicket(p.id, roomId, mode, carClass, trackId, {
+        car: e.car,
+        handle: e.handle,
+        raceId,
+        bots: botsNeeded,
+      });
       await this.redis.setex(`mm:ticket:${p.id}`, 90, JSON.stringify(ticket));
       await this.redis.publish(`mm:ready:${p.id}`, JSON.stringify(ticket));
-    }
-
-    // Bot slots published as synthetic tickets (no real player).
-    for (let i = 0; i < botsNeeded; i++) {
-      this.logger.log(`  bot slot ${i + 1}/${botsNeeded} reserved for ${roomId}`);
     }
   }
 }

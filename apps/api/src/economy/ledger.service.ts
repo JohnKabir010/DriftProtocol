@@ -32,36 +32,53 @@ export class LedgerService {
     }
 
     const journalId = crypto.randomUUID();
-    try {
-      await this.prisma.$transaction(async (tx) => {
-        // Reject overdrafts before posting: a player leg may not take a
-        // balance negative. House legs are exempt (they absorb float).
-        for (const leg of params.legs) {
-          if (leg.playerId && leg.amount < 0n) {
-            const balance = await this.balanceOf(leg.playerId, params.currency, tx);
-            if (balance + leg.amount < 0n) {
-              throw new BadRequestException("Insufficient balance");
+    // Serializable isolation makes the overdraft check race-proof: two
+    // concurrent spends from the same balance cannot both read the old sum.
+    // Serialization aborts (P2034) are retried with backoff.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await this.prisma.$transaction(
+          async (tx) => {
+            // Reject overdrafts before posting: a player leg may not take a
+            // balance negative. House legs are exempt (they absorb float).
+            for (const leg of params.legs) {
+              if (leg.playerId && leg.amount < 0n) {
+                const balance = await this.balanceOf(leg.playerId, params.currency, tx);
+                if (balance + leg.amount < 0n) {
+                  throw new BadRequestException("Insufficient balance");
+                }
+              }
             }
-          }
+            await tx.ledgerEntry.createMany({
+              data: params.legs.map((leg, i) => ({
+                playerId: leg.playerId,
+                currency: params.currency,
+                amount: leg.amount,
+                journalId,
+                reason: params.reason,
+                refType: params.refType,
+                refId: params.refId,
+                // One idempotency key per journal; legs disambiguated by index.
+                idempotencyKey: `${params.idempotencyKey}:${i}`,
+              })),
+            });
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+        return;
+      } catch (err) {
+        // Unique violation on idempotencyKey ⇒ this journal already posted; treat as success.
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") return;
+        if (
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === "P2034" &&
+          attempt < 3
+        ) {
+          await new Promise((r) => setTimeout(r, 20 * (attempt + 1)));
+          continue;
         }
-        await tx.ledgerEntry.createMany({
-          data: params.legs.map((leg, i) => ({
-            playerId: leg.playerId,
-            currency: params.currency,
-            amount: leg.amount,
-            journalId,
-            reason: params.reason,
-            refType: params.refType,
-            refId: params.refId,
-            // One idempotency key per journal; legs disambiguated by index.
-            idempotencyKey: `${params.idempotencyKey}:${i}`,
-          })),
-        });
-      });
-    } catch (err) {
-      // Unique violation on idempotencyKey ⇒ this journal already posted; treat as success.
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") return;
-      throw err;
+        throw err;
+      }
     }
   }
 
