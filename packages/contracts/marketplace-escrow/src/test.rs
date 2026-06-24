@@ -161,7 +161,47 @@ fn zero_amount_rejected() {
     client.list(&seller, &asset, &0, &1_000_0000, &100); // amount=0 → panic
 }
 
-// ── Test 8: events are emitted on list and buy ────────────────────────────
+// ── Test 9: get_listing returns correct data ──────────────────────────────
+
+#[test]
+fn get_listing_returns_active_listing() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, asset, _fee, client) = setup(&env);
+
+    let seller = Address::generate(&env);
+    StellarAssetClient::new(&env, &asset).mint(&seller, &3);
+
+    let id = client.list(&seller, &asset, &2, &800_0000, &500);
+    let listing = client.get_listing(&id);
+
+    assert_eq!(listing.seller, seller);
+    assert_eq!(listing.amount, 2);
+    assert_eq!(listing.price_usdc, 800_0000);
+    assert!(listing.active);
+}
+
+// ── Test 10: get_listing reflects inactive after buy ──────────────────────
+
+#[test]
+fn get_listing_inactive_after_buy() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (usdc, asset, _fee, client) = setup(&env);
+
+    let seller = Address::generate(&env);
+    let buyer  = Address::generate(&env);
+    StellarAssetClient::new(&env, &asset).mint(&seller, &1);
+    StellarAssetClient::new(&env, &usdc).mint(&buyer, &2_000_0000);
+
+    let id = client.list(&seller, &asset, &1, &1_000_0000, &300);
+    client.buy(&buyer, &id);
+
+    let listing = client.get_listing(&id);
+    assert!(!listing.active);
+}
+
+// ── Test 8 (original): events are emitted on list and buy ────────────────────────────
 
 #[test]
 fn events_emitted_on_list_and_buy() {
