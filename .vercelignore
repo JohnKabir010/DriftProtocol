@@ -1,0 +1,11 @@
+node_modules
+apps/api
+apps/realtime
+packages/contracts/target
+**/.turbo
+**/dist
+**/.next
+**/build
+*.log
+.env
+.env.local
