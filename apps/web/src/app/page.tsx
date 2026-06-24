@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
 
 /* ── Particle data — fixed so SSR/client match ─────────────────────────── */
 const PARTICLES: Array<{
@@ -59,7 +60,22 @@ const FEATURES = [
   },
 ];
 
+function useLiveStats() {
+  const [stats, setStats] = useState({ racers: 47, races: 12, districts: 3 });
+  useEffect(() => {
+    fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"}/v1/health`)
+      .then((r) => r.json())
+      .then(() => {
+        // Health endpoint confirms API is live; stats remain demo values until
+        // a dedicated /v1/stats endpoint is added in a future iteration.
+      })
+      .catch(() => {});
+  }, []);
+  return stats;
+}
+
 export default function LandingPage() {
+  const stats = useLiveStats();
   return (
     <main className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-void pt-16">
 
@@ -186,16 +202,16 @@ export default function LandingPage() {
               style={{ display: "inline-block" }}
             />
             <span className="font-display text-[10px] tracking-widest text-white/30">
-              ACTIVE RACERS: 47
+              ACTIVE RACERS: {stats.racers}
             </span>
           </div>
           <span className="text-white/15 font-display text-xs">|</span>
           <span className="font-display text-[10px] tracking-widest text-white/30">
-            LIVE RACES: 12
+            LIVE RACES: {stats.races}
           </span>
           <span className="text-white/15 font-display text-xs">|</span>
           <span className="font-display text-[10px] tracking-widest text-white/30">
-            DISTRICTS CONTESTED: 3
+            DISTRICTS CONTESTED: {stats.districts}
           </span>
         </motion.div>
       </section>
