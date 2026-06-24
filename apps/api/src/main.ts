@@ -6,6 +6,7 @@ import helmet from "helmet";
 import compression from "compression";
 import { validateEnv } from "./config/env";
 import { AppModule } from "./app.module";
+import { HttpExceptionFilter } from "./common/http-exception.filter";
 
 async function bootstrap(): Promise<void> {
   // Validate all required env vars before doing anything else.
@@ -27,6 +28,8 @@ async function bootstrap(): Promise<void> {
   app.use(compression());
 
   app.setGlobalPrefix("v1");
+
+  app.useGlobalFilters(new HttpExceptionFilter());
 
   app.useGlobalPipes(
     new ValidationPipe({
