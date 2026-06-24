@@ -47,7 +47,9 @@ async function bootstrap(): Promise<void> {
     origin: origins.length === 1 ? origins[0] : origins,
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-request-id"],
+    exposedHeaders: ["x-request-id"],
+    maxAge: 86400, // cache preflight for 24 h
   });
 
   // Trust first proxy (Railway / Fly sit behind a load balancer).
