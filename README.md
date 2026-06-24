@@ -2,9 +2,16 @@
 
 > Web-based 3D multiplayer cyberpunk street racing with a player-driven underground economy settled on Stellar/Soroban.
 
-[![CI](https://github.com/SamyaDeb/DriftProtocol/actions/workflows/ci.yml/badge.svg)](https://github.com/SamyaDeb/DriftProtocol/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-103%20passing-brightgreen)](#testing)
+[![CI](https://github.com/JohnKabir010/DriftProtocol/actions/workflows/ci.yml/badge.svg)](https://github.com/JohnKabir010/DriftProtocol/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-124%20passing-brightgreen)](#testing)
 [![Soroban](https://img.shields.io/badge/soroban-testnet-blue)](#smart-contract-deployment)
+[![Live Demo](https://img.shields.io/badge/demo-live-neon)](https://drift-protocol-gamma.vercel.app)
+
+## 🚀 Live Demo
+
+**[https://drift-protocol-gamma.vercel.app](https://drift-protocol-gamma.vercel.app)**
+
+> Full Next.js 14 frontend deployed on Vercel — all 14 game routes live including the 3D racing scene, garage, leaderboard, marketplace, and wallet pages.
 
 ---
 
