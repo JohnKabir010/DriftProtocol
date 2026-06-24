@@ -3,7 +3,7 @@
 > Web-based 3D multiplayer cyberpunk street racing with a player-driven underground economy settled on Stellar / Soroban.
 
 [![CI](https://github.com/JohnKabir010/DriftProtocol/actions/workflows/ci.yml/badge.svg)](https://github.com/JohnKabir010/DriftProtocol/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-124%20passing-brightgreen)](#testing)
+[![Tests](https://img.shields.io/badge/tests-130%20passing-brightgreen)](#testing)
 [![Soroban](https://img.shields.io/badge/soroban-testnet-blue)](#smart-contracts)
 [![Live](https://img.shields.io/badge/live-vercel-black)](https://drift-protocol-gamma.vercel.app)
 
@@ -254,11 +254,11 @@ pnpm --filter @drift/web test                 # Vitest
 Suite                    Tool         Tests   Coverage areas
 ─────────────────────────────────────────────────────────────────────────
 packages/contracts       cargo test     10    settlement, cancel, expiry, fee-cap, events, get_listing
-packages/shared          vitest         82    sim ×25, domain ×19, catalog ×11, utils ×13, netcode ×4, track ×14, bot ×9 (partial overlap)
+packages/shared          vitest         86    sim ×25, domain ×19, catalog ×11, utils ×17, netcode ×4, track ×14, bot ×9 (partial overlap)
 apps/api                 jest           22    chain-tx ×8, chain-reconciler ×8, ledger ×6
 apps/web                 vitest         12    API type guards ×12
 ─────────────────────────────────────────────────────────────────────────
-TOTAL                                  124   0 failing
+TOTAL                                  130   0 failing
 ```
 
 ---

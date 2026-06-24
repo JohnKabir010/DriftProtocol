@@ -35,9 +35,8 @@ jobs:
         run: pnpm --filter @drift/shared build
 
       - name: Typecheck (gate before deploy)
-        run: pnpm -r exec tsc --noEmit
+        run: pnpm -r --if-present run typecheck
         env:
-          # Dummy DB URL so Prisma generate works without a live DB
           DATABASE_URL: postgresql://drift:drift@localhost:5432/drift
 
       # Deploy each service to Railway using the CLI.

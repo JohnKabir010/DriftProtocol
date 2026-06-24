@@ -67,7 +67,7 @@ function CarCard({
         </span>
       </div>
       <div className="font-display text-base text-white mb-0.5">{model.name}</div>
-      {car.nickname && <div className="text-xs text-white/40 italic">"{car.nickname}"</div>}
+      {car.nickname && <div className="text-xs text-white/40 italic">&quot;{car.nickname}&quot;</div>}
       <div className="neon-divider my-3" />
       <div className="flex gap-1.5">
         {SLOTS.map((slot) => {

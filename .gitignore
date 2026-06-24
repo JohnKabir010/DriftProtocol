@@ -16,3 +16,4 @@ infra/nginx/certs/
 docker-compose.override.yml
 .env.staging
 .env.production
+.vercel
