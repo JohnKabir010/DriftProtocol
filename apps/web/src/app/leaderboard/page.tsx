@@ -65,11 +65,12 @@ function PodiumCard({ entry, podiumRank }: { entry: LeaderboardRow; podiumRank: 
 export default function LeaderboardPage() {
   const [rows, setRows] = useState<LeaderboardRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     api.players.leaderboard()
       .then(setRows)
-      .catch(() => {})
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Failed to load standings"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -109,7 +110,12 @@ export default function LeaderboardPage() {
 
         <div className="neon-divider" />
 
-        {loading ? (
+        {error ? (
+          <HoloCard className="p-10 text-center">
+            <p className="font-display text-neon-magenta text-sm tracking-widest">SIGNAL LOST</p>
+            <p className="font-display text-white/30 text-xs mt-2">{error}</p>
+          </HoloCard>
+        ) : loading ? (
           <div className="space-y-3">
             {/* Podium skeleton */}
             <div className="grid grid-cols-3 gap-4 items-end">
