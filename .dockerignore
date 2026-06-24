@@ -1,0 +1,14 @@
+**/.git
+**/.next
+**/node_modules
+**/dist
+**/.turbo
+**/coverage
+**/*.log
+**/.env
+**/.env.*
+!**/.env.example
+**/Dockerfile
+**/.dockerignore
+**/README.md
+packages/contracts

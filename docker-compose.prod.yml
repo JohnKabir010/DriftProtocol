@@ -1,0 +1,114 @@
+version: "3.9"
+
+# Production-like compose (testnet Stellar, no source mounts).
+# Set environment variables via .env or host environment before running.
+
+x-common-env: &common-env
+  NODE_ENV: production
+  DATABASE_URL: ${DATABASE_URL}
+  REDIS_URL: redis://redis:6379
+
+services:
+  # ── Infrastructure ───────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: drift
+      POSTGRES_USER: drift
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U drift"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── API ──────────────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      API_PORT: "4000"
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET}
+      REALTIME_SERVICE_TOKEN: ${REALTIME_SERVICE_TOKEN:?set REALTIME_SERVICE_TOKEN}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
+      STELLAR_NETWORK: ${STELLAR_NETWORK:-testnet}
+      STELLAR_HORIZON_URL: ${STELLAR_HORIZON_URL:-https://horizon-testnet.stellar.org}
+      STELLAR_MASTER_SEED: ${STELLAR_MASTER_SEED:?set STELLAR_MASTER_SEED}
+      STELLAR_USDC_ISSUER: ${STELLAR_USDC_ISSUER:-GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5}
+      STELLAR_SPONSOR_SECRET: ${STELLAR_SPONSOR_SECRET:-}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/v1/health | grep -q ok"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ── Realtime ─────────────────────────────────────────────────────────────────
+  realtime:
+    build:
+      context: .
+      dockerfile: apps/realtime/Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      REALTIME_PORT: "2567"
+      REALTIME_SERVICE_TOKEN: ${REALTIME_SERVICE_TOKEN:?set REALTIME_SERVICE_TOKEN}
+      API_INTERNAL_URL: http://api:4000
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET}
+    depends_on:
+      api: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  # ── Web ──────────────────────────────────────────────────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://api:4000}
+      NEXT_PUBLIC_REALTIME_URL: ${NEXT_PUBLIC_REALTIME_URL:-ws://realtime:2567}
+      PORT: "3000"
+    depends_on:
+      - api
+
+  # ── Nginx reverse proxy ──────────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infra/nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - web
+      - api
+      - realtime
+
+volumes:
+  pgdata:
+  redisdata:

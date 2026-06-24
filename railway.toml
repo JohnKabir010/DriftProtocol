@@ -1,0 +1,30 @@
+# Railway monorepo config — each service defined separately in Railway UI.
+# This file documents the per-service settings to apply.
+#
+# Service: drift-api
+#   Build: Dockerfile → apps/api/Dockerfile (set root context: /)
+#   Start: (in Dockerfile CMD)
+#   Healthcheck: /v1/health
+#   Env: see .env.example (copy to Railway Variables)
+#
+# Service: drift-realtime
+#   Build: Dockerfile → apps/realtime/Dockerfile (set root context: /)
+#   Port: 2567
+#   Env: DATABASE_URL, REDIS_URL, JWT_ACCESS_SECRET, REALTIME_SERVICE_TOKEN
+#
+# Service: drift-web
+#   Build: Dockerfile → apps/web/Dockerfile (set root context: /)
+#   Port: 3000
+#   Env: NEXT_PUBLIC_API_URL (point to drift-api Railway domain)
+#        NEXT_PUBLIC_REALTIME_URL (point to drift-realtime Railway domain)
+#
+# Managed services (add via Railway UI):
+#   - PostgreSQL 16
+#   - Redis 7
+
+[build]
+builder = "DOCKERFILE"
+
+[deploy]
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

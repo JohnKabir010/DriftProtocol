@@ -10,3 +10,9 @@ coverage/
 .DS_Store
 # Soroban/Rust
 packages/contracts/target/
+
+# Deployment / infra
+infra/nginx/certs/
+docker-compose.override.yml
+.env.staging
+.env.production
