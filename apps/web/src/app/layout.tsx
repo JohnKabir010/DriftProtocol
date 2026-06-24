@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Orbitron, Inter } from "next/font/google";
 import { NavBar } from "@/components/ui/NavBar";
 import { SessionProvider } from "@/components/providers/SessionProvider";
+import { ToastContainer } from "@/components/ui/Toast";
 import "./globals.css";
 
 const orbitron = Orbitron({
@@ -30,6 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <SessionProvider>
           <NavBar />
           {children}
+          <ToastContainer />
         </SessionProvider>
       </body>
     </html>
