@@ -65,6 +65,11 @@ jobs:
       - name: Build shared packages
         run: pnpm --filter @drift/shared build
 
+      - name: Generate Prisma client
+        run: pnpm --filter @drift/api exec prisma generate
+        env:
+          DATABASE_URL: postgresql://drift:drift@localhost:5432/drift
+
       - name: Typecheck shared
         run: pnpm --filter @drift/shared typecheck
 
