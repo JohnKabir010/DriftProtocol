@@ -145,6 +145,14 @@ impl MarketplaceEscrow {
         );
     }
 
+    /// Read-only view: returns the listing struct for off-chain indexers and UIs.
+    pub fn get_listing(env: Env, listing_id: u64) -> Listing {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Listing(listing_id))
+            .expect("no listing")
+    }
+
     /// Seller cancels (any time) or anyone may trigger refund after expiry.
     pub fn cancel(env: Env, listing_id: u64) {
         let key = DataKey::Listing(listing_id);
