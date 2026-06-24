@@ -4,10 +4,18 @@
 //! registry token; a buyer fills with USDC; the swap is atomic. There is
 //! deliberately NO admin withdrawal path: funds can only flow to the buyer,
 //! the seller, or back to the seller on cancel/expiry.
+//!
+//! # Events emitted
+//!
+//! Every state-changing function emits a Soroban event for off-chain indexers:
+//!
+//! - `("escrow", "listed")` — `(listing_id: u64, seller: Address, price_usdc: i128)`
+//! - `("escrow", "sold")`   — `(listing_id: u64, buyer: Address, price_usdc: i128)`
+//! - `("escrow", "cancelled")` — `(listing_id: u64, seller: Address, expired: bool)`
 
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, contracttype, token, Address, Env};
+use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, token, Address, Env, Symbol};
 
 #[derive(Clone)]
 #[contracttype]
@@ -85,16 +93,20 @@ impl MarketplaceEscrow {
 
         let id: u64 = env.storage().instance().get(&DataKey::NextId).unwrap();
         env.storage().instance().set(&DataKey::NextId, &(id + 1));
-        env.storage().persistent().set(
-            &DataKey::Listing(id),
-            &Listing {
-                seller,
-                asset_contract,
-                amount,
-                price_usdc,
-                expiry_ledger: env.ledger().sequence() + ttl_ledgers,
-                active: true,
-            },
+        let listing = Listing {
+            seller: seller.clone(),
+            asset_contract,
+            amount,
+            price_usdc,
+            expiry_ledger: env.ledger().sequence() + ttl_ledgers,
+            active: true,
+        };
+        env.storage().persistent().set(&DataKey::Listing(id), &listing);
+
+        // Emit: ("escrow", "listed") → (listing_id, seller, price_usdc)
+        env.events().publish(
+            (Symbol::new(&env, "escrow"), symbol_short!("listed")),
+            (id, seller, price_usdc),
         );
         id
     }
@@ -125,6 +137,12 @@ impl MarketplaceEscrow {
 
         listing.active = false;
         env.storage().persistent().set(&key, &listing);
+
+        // Emit: ("escrow", "sold") → (listing_id, buyer, price_usdc)
+        env.events().publish(
+            (Symbol::new(&env, "escrow"), symbol_short!("sold")),
+            (listing_id, buyer, listing.price_usdc),
+        );
     }
 
     /// Seller cancels (any time) or anyone may trigger refund after expiry.
@@ -138,6 +156,7 @@ impl MarketplaceEscrow {
             listing.seller.require_auth();
         }
 
+        let expired = env.ledger().sequence() >= listing.expiry_ledger;
         token::Client::new(&env, &listing.asset_contract).transfer(
             &env.current_contract_address(),
             &listing.seller,
@@ -145,6 +164,12 @@ impl MarketplaceEscrow {
         );
         listing.active = false;
         env.storage().persistent().set(&key, &listing);
+
+        // Emit: ("escrow", "cancelled") → (listing_id, seller, expired)
+        env.events().publish(
+            (Symbol::new(&env, "escrow"), symbol_short!("canceld")),
+            (listing_id, listing.seller, expired),
+        );
     }
 }
 
