@@ -15,7 +15,9 @@
     "db:migrate": "pnpm --filter @drift/api prisma migrate dev",
     "db:studio": "pnpm --filter @drift/api prisma studio",
     "infra:up": "docker compose up -d",
-    "infra:down": "docker compose down"
+    "infra:down": "docker compose down",
+    "contracts:bootstrap": "pnpm tsx scripts/testnet-bootstrap.ts",
+    "contracts:deploy": "pnpm tsx scripts/deploy-marketplace-escrow.ts"
   },
   "devDependencies": {
     "turbo": "^2.3.0",
