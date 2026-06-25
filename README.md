@@ -9,11 +9,10 @@
 [![Soroban](https://img.shields.io/badge/soroban-testnet-blue)](#smart-contracts)
 [![Live](https://img.shields.io/badge/live-vercel-black)](https://drift-protocol-gamma.vercel.app)
 
-## Live Demo
-
-**[https://drift-protocol-gamma.vercel.app](https://drift-protocol-gamma.vercel.app)**
-
-All 14 game routes are live: `/play` (3D race), `/garage`, `/leaderboard`, `/market`, `/factions`, `/districts`, `/betting`, `/tournaments`, `/wallet`, and more.
+---
+## Live Demo - https://drift-protocol-gamma.vercel.app
+---
+## Demo Link - https://youtu.be/uQhri5McjUw?si=9Idqn70umcAjjNAi
 
 ---
 
