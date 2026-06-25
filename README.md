@@ -1,5 +1,7 @@
 # Drift Protocol
 
+<img width="1457" height="823" alt="Screenshot 2026-06-25 at 3 20 03 PM" src="https://github.com/user-attachments/assets/67ab1005-1702-4e73-9e62-62acd4132942" />
+
 > Web-based 3D multiplayer cyberpunk street racing with a player-driven underground economy settled on Stellar / Soroban.
 
 [![CI](https://github.com/JohnKabir010/DriftProtocol/actions/workflows/ci.yml/badge.svg)](https://github.com/JohnKabir010/DriftProtocol/actions/workflows/ci.yml)
@@ -264,6 +266,8 @@ TOTAL                                  130   0 failing
 ---
 
 ## CI/CD Pipeline
+
+<img width="1457" height="823" alt="Screenshot 2026-06-25 at 3 20 03 PM" src="https://github.com/user-attachments/assets/f7ba5d70-1916-48a3-b471-8c68ab20dd69" />
 
 ```
 push / PR  →  [Lint]  →  [Typecheck]  →  [Backend Tests]  →  [Build]
