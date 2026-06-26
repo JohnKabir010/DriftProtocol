@@ -266,13 +266,22 @@ function SendForm({
 
 // ── main panel ────────────────────────────────────────────────────────────────
 
-export function StellarWalletPanel() {
+interface StellarWalletPanelProps {
+  onAddressChange?: (address: string | null) => void;
+}
+
+export function StellarWalletPanel({ onAddressChange }: StellarWalletPanelProps = {}) {
   const [hasFreighter, setHasFreighter] = useState<boolean | null>(null);
   const [address, setAddress] = useState<string | null>(null);
   const [balance, setBalance] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
+
+  function updateAddress(addr: string | null) {
+    setAddress(addr);
+    onAddressChange?.(addr);
+  }
 
   // Detect Freighter and auto-restore session if already permitted
   useEffect(() => {
@@ -284,7 +293,7 @@ export function StellarWalletPanel() {
           // isAllowed() + getAddress() — restore session without re-prompting
           const addr = await getWalletAddress();
           if (addr) {
-            setAddress(addr);
+            updateAddress(addr);
             await loadBalance(addr);
           }
         }
@@ -300,7 +309,7 @@ export function StellarWalletPanel() {
     setConnectError(null);
     try {
       const addr = await connectWallet();
-      setAddress(addr);
+      updateAddress(addr);
       await loadBalance(addr);
     } catch (err) {
       setConnectError(err instanceof Error ? err.message : "Connection failed");
@@ -326,7 +335,7 @@ export function StellarWalletPanel() {
   }
 
   function handleDisconnect() {
-    setAddress(null);
+    updateAddress(null);
     setBalance(null);
     setConnectError(null);
   }

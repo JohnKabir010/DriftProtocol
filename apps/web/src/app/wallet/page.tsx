@@ -1,8 +1,18 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { StellarWalletPanel } from "@/components/wallet/stellar-wallet-panel";
+import { EscrowPanel } from "@/components/wallet/escrow-panel";
+import { getWalletAddress } from "@/lib/stellar-wallet";
 
 export default function WalletPage() {
+  const [address, setAddress] = useState<string | null>(null);
+
+  // Mirror the connected address so EscrowPanel can call the contract
+  useEffect(() => {
+    getWalletAddress().then(setAddress).catch(() => {});
+  }, []);
+
   return (
     <main className="min-h-screen pt-24 px-6 pb-10">
       <div className="max-w-2xl mx-auto space-y-6">
@@ -29,8 +39,11 @@ export default function WalletPage() {
           </span>
         </div>
 
-        {/* Wallet panel — all requirements in one component */}
-        <StellarWalletPanel />
+        {/* Wallet panel — Freighter connect/balance/send */}
+        <StellarWalletPanel onAddressChange={setAddress} />
+
+        {/* Escrow panel — on-chain Soroban contract interaction */}
+        <EscrowPanel walletAddress={address} />
 
         <div className="font-display text-[10px] text-white/20 text-center tracking-widest pt-4">
           ALL TRANSACTIONS TARGET STELLAR TESTNET — NO REAL FUNDS
