@@ -2,11 +2,14 @@
  * Drift Protocol — Marketplace Escrow Soroban Contract Client
  *
  * Wraps the on-chain marketplace-escrow contract functions:
- *   get_listing · list · buy · cancel
+ *   init · get_listing · list · buy · cancel
  *
- * State-changing calls (list / buy / cancel) return an unsigned XDR string.
+ * State-changing calls (init / list / buy / cancel) return an unsigned XDR string.
  * Callers must sign it with stellar-wallet.ts#signTx(), then submit with
  * submitContractTx().
+ *
+ * callContractFunction() is a generic helper that builds, simulates, signs
+ * (with a raw secret key), and submits a contract call in one shot.
  */
 
 import {
@@ -14,12 +17,13 @@ import {
   rpc,
   Transaction,
   TransactionBuilder,
-  Networks,
   BASE_FEE,
   nativeToScVal,
   Address,
   scValToNative,
+  Keypair,
 } from "@stellar/stellar-sdk";
+import { server, networkPassphrase } from "./stellar-sdk";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -27,9 +31,7 @@ export const MARKETPLACE_CONTRACT_ID =
   process.env.NEXT_PUBLIC_MARKETPLACE_ESCROW_CONTRACT_ID ??
   "CBMBWHUDVNXT76B5I6WK753KY2CNH7ZIU26H57JS5ZBSWTKJH4DUW5RP";
 
-const SOROBAN_RPC_URL =
-  process.env.NEXT_PUBLIC_SOROBAN_RPC_URL ??
-  "https://soroban-testnet.stellar.org";
+export const CONTRACT_ID = MARKETPLACE_CONTRACT_ID;
 
 // ── Contract instance ─────────────────────────────────────────────────────────
 
@@ -48,23 +50,104 @@ export interface OnChainListing {
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
-function getRpcServer(): rpc.Server {
-  return new rpc.Server(SOROBAN_RPC_URL, { allowHttp: false });
-}
-
 async function buildBaseTx(
   callerAddress: string,
   operation: ReturnType<Contract["call"]>,
 ): Promise<Transaction> {
-  const server = getRpcServer();
   const account = await server.getAccount(callerAddress);
   return new TransactionBuilder(account, {
     fee: BASE_FEE,
-    networkPassphrase: Networks.TESTNET,
+    networkPassphrase,
   })
     .addOperation(operation)
     .setTimeout(30)
     .build();
+}
+
+// ── Generic contract caller ───────────────────────────────────────────────────
+
+/**
+ * Build, simulate, sign (with signerSecret), and submit any contract call.
+ * Returns the native-decoded return value, or undefined for void functions.
+ */
+export async function callContractFunction(
+  contractId: string,
+  method: string,
+  args: ReturnType<typeof nativeToScVal>[],
+  signerSecret: string,
+): Promise<ReturnType<typeof scValToNative> | undefined> {
+  const keypair = Keypair.fromSecret(signerSecret);
+  const account = await server.getAccount(keypair.publicKey());
+  const contract = new Contract(contractId);
+  const tx = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase,
+  })
+    .addOperation(contract.call(method, ...args))
+    .setTimeout(30)
+    .build();
+
+  const sim = await server.simulateTransaction(tx);
+  if (rpc.Api.isSimulationError(sim)) {
+    throw new Error(`Simulation failed: ${sim.error}`);
+  }
+
+  const assembled = rpc
+    .assembleTransaction(tx, sim as rpc.Api.SimulateTransactionSuccessResponse)
+    .build();
+  assembled.sign(keypair);
+
+  const send = await server.sendTransaction(assembled);
+  if (send.status === "ERROR") {
+    throw new Error(send.errorResult?.result().toString() ?? "Send error");
+  }
+
+  const final = await server.pollTransaction(send.hash, {
+    attempts: 10,
+    sleepStrategy: rpc.BasicSleepStrategy,
+  });
+
+  if (final.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
+    throw new Error(`Transaction failed (status: ${final.status})`);
+  }
+
+  if (rpc.Api.isGetTransactionSuccess(final) && final.returnValue != null) {
+    return scValToNative(final.returnValue);
+  }
+  return undefined;
+}
+
+// ── init ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Build XDR for `init(usdc, fee_recipient, fee_bps)`.
+ * One-time contract initialisation — must be called by the deployer.
+ */
+export async function buildInitTx(
+  callerAddress: string,
+  usdc: string,
+  feeRecipient: string,
+  feeBps: number,
+): Promise<string> {
+  const tx = await buildBaseTx(
+    callerAddress,
+    escrowContract.call(
+      "init",
+      new Address(usdc).toScVal(),
+      new Address(feeRecipient).toScVal(),
+      nativeToScVal(feeBps, { type: "u32" }),
+    ),
+  );
+
+  const sim = await server.simulateTransaction(tx);
+  if (rpc.Api.isSimulationError(sim)) {
+    throw new Error(`init simulation failed: ${sim.error}`);
+  }
+
+  return rpc
+    .assembleTransaction(tx, sim as rpc.Api.SimulateTransactionSuccessResponse)
+    .build()
+    .toXDR();
 }
 
 // ── get_listing ───────────────────────────────────────────────────────────────
@@ -77,7 +160,6 @@ export async function getListing(
   callerAddress: string,
   listingId: bigint,
 ): Promise<OnChainListing> {
-  const server = getRpcServer();
   const tx = await buildBaseTx(
     callerAddress,
     escrowContract.call("get_listing", nativeToScVal(listingId, { type: "u64" })),
@@ -115,7 +197,6 @@ export async function buildListTx(
   priceUsdc: bigint,
   ttlLedgers: number,
 ): Promise<string> {
-  const server = getRpcServer();
   const tx = await buildBaseTx(
     sellerAddress,
     escrowContract.call(
@@ -133,10 +214,8 @@ export async function buildListTx(
     throw new Error(`list simulation failed: ${sim.error}`);
   }
 
-  return rpc.assembleTransaction(
-    tx,
-    sim as rpc.Api.SimulateTransactionSuccessResponse,
-  )
+  return rpc
+    .assembleTransaction(tx, sim as rpc.Api.SimulateTransactionSuccessResponse)
     .build()
     .toXDR();
 }
@@ -151,7 +230,6 @@ export async function buildBuyTx(
   buyerAddress: string,
   listingId: bigint,
 ): Promise<string> {
-  const server = getRpcServer();
   const tx = await buildBaseTx(
     buyerAddress,
     escrowContract.call(
@@ -166,10 +244,8 @@ export async function buildBuyTx(
     throw new Error(`buy simulation failed: ${sim.error}`);
   }
 
-  return rpc.assembleTransaction(
-    tx,
-    sim as rpc.Api.SimulateTransactionSuccessResponse,
-  )
+  return rpc
+    .assembleTransaction(tx, sim as rpc.Api.SimulateTransactionSuccessResponse)
     .build()
     .toXDR();
 }
@@ -184,7 +260,6 @@ export async function buildCancelTx(
   callerAddress: string,
   listingId: bigint,
 ): Promise<string> {
-  const server = getRpcServer();
   const tx = await buildBaseTx(
     callerAddress,
     escrowContract.call(
@@ -198,10 +273,8 @@ export async function buildCancelTx(
     throw new Error(`cancel simulation failed: ${sim.error}`);
   }
 
-  return rpc.assembleTransaction(
-    tx,
-    sim as rpc.Api.SimulateTransactionSuccessResponse,
-  )
+  return rpc
+    .assembleTransaction(tx, sim as rpc.Api.SimulateTransactionSuccessResponse)
     .build()
     .toXDR();
 }
@@ -212,8 +285,7 @@ export async function buildCancelTx(
  * Submit a signed Soroban transaction XDR to the network and poll for completion.
  */
 export async function submitContractTx(signedXdr: string): Promise<{ hash: string }> {
-  const server = getRpcServer();
-  const tx = TransactionBuilder.fromXDR(signedXdr, Networks.TESTNET);
+  const tx = TransactionBuilder.fromXDR(signedXdr, networkPassphrase);
   const send = await server.sendTransaction(tx);
 
   if (send.status === "ERROR") {

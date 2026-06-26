@@ -1,0 +1,87 @@
+name: Deploy → Production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false   # never cancel a deploy mid-flight
+
+jobs:
+  # ── Job 1: Deploy Soroban contract to Stellar testnet ─────────────────────
+  deploy-contract:
+    name: Deploy Soroban contract → Stellar testnet
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    defaults:
+      run:
+        working-directory: packages/contracts
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/contracts
+
+      - name: Build WASM
+        run: cargo build --target wasm32-unknown-unknown --release
+
+      - name: Install Stellar CLI
+        run: cargo install --locked stellar-cli --features opt
+
+      - name: Deploy marketplace-escrow contract
+        run: |
+          stellar contract deploy \
+            --wasm target/wasm32-unknown-unknown/release/marketplace_escrow.wasm \
+            --source ${{ secrets.STELLAR_SECRET_KEY }} \
+            --network testnet
+
+  # ── Job 2: Build and deploy frontend → Railway ─────────────────────────────
+  deploy-frontend:
+    name: Build & deploy frontend → Railway
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    needs: [deploy-contract]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared packages
+        run: pnpm --filter @drift/shared build
+
+      - name: Build web (Next.js)
+        run: pnpm --filter @drift/web build
+        env:
+          NEXT_PUBLIC_CONTRACT_ID: ${{ secrets.NEXT_PUBLIC_CONTRACT_ID }}
+          NEXT_PUBLIC_SOROBAN_RPC_URL: ${{ secrets.NEXT_PUBLIC_SOROBAN_RPC_URL }}
+          NEXT_PUBLIC_NETWORK_PASSPHRASE: ${{ secrets.NEXT_PUBLIC_NETWORK_PASSPHRASE }}
+          NEXT_PUBLIC_MARKETPLACE_ESCROW_CONTRACT_ID: ${{ secrets.NEXT_PUBLIC_CONTRACT_ID }}
+          NEXT_PUBLIC_API_URL: ${{ vars.PRODUCTION_API_URL }}
+          NEXT_PUBLIC_REALTIME_URL: ${{ vars.PRODUCTION_REALTIME_URL }}
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy Web to Railway
+        run: railway up --service drift-web --detach
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}

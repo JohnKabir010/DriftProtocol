@@ -1,4 +1,4 @@
-.PHONY: build test deploy clean fmt check
+.PHONY: build test deploy clean fmt check lint
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 WASM         := target/wasm32-unknown-unknown/release/marketplace_escrow.wasm
@@ -50,6 +50,9 @@ invoke-init:
 		--usdc $(USDC) \
 		--fee_recipient $(FEE_RECIPIENT) \
 		--fee_bps $(FEE_BPS)
+
+## lint: Clippy lint pass (alias for check)
+lint: check
 
 ## clean: Remove build artefacts
 clean:

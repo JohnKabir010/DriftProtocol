@@ -1,3 +1,4 @@
+import * as StellarSdk from "@stellar/stellar-sdk";
 import {
   Horizon,
   Networks,
@@ -6,6 +7,16 @@ import {
   Asset,
   BASE_FEE,
 } from "@stellar/stellar-sdk";
+
+export { StellarSdk };
+
+const SOROBAN_RPC_URL =
+  process.env.NEXT_PUBLIC_SOROBAN_RPC_URL ?? "https://soroban-testnet.stellar.org";
+
+export const networkPassphrase =
+  process.env.NEXT_PUBLIC_NETWORK_PASSPHRASE ?? Networks.TESTNET;
+
+export const server = new StellarSdk.rpc.Server(SOROBAN_RPC_URL, { allowHttp: false });
 
 import { HORIZON_TESTNET_URL, STELLAR_TESTNET_PASSPHRASE } from "./stellar-wallet";
 
