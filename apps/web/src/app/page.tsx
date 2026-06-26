@@ -187,6 +187,15 @@ export default function LandingPage() {
               GARAGE
             </Link>
           </motion.div>
+
+          <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+            <Link
+              href="/wallet"
+              className="holo-card inline-block px-10 py-4 font-display text-xl text-neon-volt/80 hover:text-neon-volt border border-neon-volt/30 hover:border-neon-volt/60 transition-all duration-200 tracking-widest"
+            >
+              WALLET
+            </Link>
+          </motion.div>
         </motion.div>
 
         {/* Stats bar */}

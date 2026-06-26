@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import {
   detectFreighter,
   connectWallet,
+  getWalletAddress,
   signTx,
 } from "@/lib/stellar-wallet";
 import { fetchXlmBalance, buildPaymentXdr, submitSignedTx } from "@/lib/stellar-sdk";
@@ -273,11 +274,25 @@ export function StellarWalletPanel() {
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
 
-  // Detect Freighter on mount
+  // Detect Freighter and auto-restore session if already permitted
   useEffect(() => {
-    detectFreighter()
-      .then(setHasFreighter)
-      .catch(() => setHasFreighter(false));
+    (async () => {
+      try {
+        const detected = await detectFreighter();
+        setHasFreighter(detected);
+        if (detected) {
+          // isAllowed() + getAddress() — restore session without re-prompting
+          const addr = await getWalletAddress();
+          if (addr) {
+            setAddress(addr);
+            await loadBalance(addr);
+          }
+        }
+      } catch {
+        setHasFreighter(false);
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function handleConnect() {

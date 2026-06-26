@@ -166,6 +166,50 @@ Open **http://localhost:3004** — click **RACE NOW** (no signup required).
 
 ---
 
+## Stellar Wallet Integration (Frontend)
+
+The live wallet page is at **[/wallet](https://drift-protocol-gamma.vercel.app/wallet)** and is linked from the NavBar and the homepage hero.
+
+### Key files
+
+| File | Purpose |
+|---|---|
+| `apps/web/src/lib/stellar-wallet.ts` | Thin Freighter API wrapper — detect, connect, address, sign |
+| `apps/web/src/lib/stellar-sdk.ts` | Horizon helpers — balance, build XDR, submit |
+| `apps/web/src/hooks/use-stellar-wallet.ts` | React hook over the wallet lib |
+| `apps/web/src/components/wallet/stellar-wallet-panel.tsx` | Full wallet UI: detect → connect → balance → send |
+| `apps/web/src/app/wallet/page.tsx` | `/wallet` page — renders `StellarWalletPanel` |
+
+### Freighter API calls
+
+`apps/web/src/lib/stellar-wallet.ts` imports and uses:
+
+```ts
+import {
+  isConnected,   // detectFreighter() — is Freighter extension present?
+  isAllowed,     // getWalletAddress() — has the user already granted access?
+  getAddress,    // getWalletAddress() — retrieve the public key
+  requestAccess, // connectWallet()    — prompt permission + return address
+  signTransaction, // signTx()         — sign an XDR envelope; returns signedTxXdr
+} from "@stellar/freighter-api";
+```
+
+### User flow
+
+1. **Page load** — `isConnected()` detects the extension. If present, `isAllowed()` + `getAddress()` silently restore a prior session.
+2. **Connect** — user clicks **CONNECT WALLET**; `requestAccess()` prompts Freighter for permission and returns the address.
+3. **Balance** — `Horizon.Server.loadAccount()` fetches the XLM balance from testnet.
+4. **Send XLM** — `TransactionBuilder` builds a payment XDR → `signTransaction()` prompts Freighter to sign → `server.submitTransaction()` broadcasts.
+
+### Dependencies (apps/web/package.json)
+
+```json
+"@stellar/freighter-api": "^6.0.1",
+"@stellar/stellar-sdk": "^13.1.0"
+```
+
+---
+
 ## Smart Contracts
 
 ### Marketplace Escrow — Soroban (Stellar Testnet)
