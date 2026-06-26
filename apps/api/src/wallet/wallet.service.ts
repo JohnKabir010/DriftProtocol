@@ -15,6 +15,8 @@ import { Keypair } from "@stellar/stellar-sdk";
 const WITHDRAWAL_FEE_BPS = 100; // 1%
 const MIN_WITHDRAWAL_USDC = "1.0000000";
 const CHALLENGE_TTL_MS = 5 * 60_000;
+const MAX_DAILY_WITHDRAWALS = 5;
+const MAX_DAILY_USDC = 1_000;
 
 @Injectable()
 export class WalletService {
@@ -149,6 +151,33 @@ export class WalletService {
     if (await this.chainTx.hasUnsettledWithdrawal(playerId)) {
       throw new BadRequestException(
         "A previous withdrawal is still settling — try again in a couple of minutes",
+      );
+    }
+
+    // Velocity limits: max 5 withdrawals and 1 000 USDC per rolling 24-hour window.
+    const windowStart = new Date(Date.now() - 24 * 60 * 60_000);
+    const daily = await this.prisma.chainTx.findMany({
+      where: {
+        kind: "USDC_WITHDRAWAL",
+        createdAt: { gte: windowStart },
+        payload: { path: ["playerId"], equals: playerId },
+        status: { in: ["PENDING", "SUBMITTED", "CONFIRMED"] },
+      },
+      select: { payload: true },
+    });
+    if (daily.length >= MAX_DAILY_WITHDRAWALS) {
+      throw new BadRequestException(
+        `Daily withdrawal limit reached (${MAX_DAILY_WITHDRAWALS} per 24 h) — try again later`,
+      );
+    }
+    const dailyUsdc = daily.reduce((sum, tx) => {
+      const amt = parseFloat((tx.payload as Record<string, string>)["amount"] ?? "0");
+      return sum + (isNaN(amt) ? 0 : amt);
+    }, 0);
+    if (dailyUsdc + amountNum > MAX_DAILY_USDC) {
+      const remaining = Math.max(0, MAX_DAILY_USDC - dailyUsdc).toFixed(7);
+      throw new BadRequestException(
+        `Daily USDC limit would be exceeded — you can withdraw up to ${remaining} USDC today`,
       );
     }
 
