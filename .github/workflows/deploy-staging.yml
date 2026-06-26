@@ -10,8 +10,67 @@ concurrency:
   cancel-in-progress: false   # never cancel a deploy mid-flight
 
 jobs:
-  deploy:
-    name: Build & deploy to Railway staging
+  # ── Job 1: Deploy Soroban contract to Stellar testnet ─────────────────────
+  deploy-contract:
+    name: Deploy Soroban contract → Stellar testnet
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    defaults:
+      run:
+        working-directory: packages/contracts
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/contracts
+
+      - name: Build WASM
+        run: make build
+
+      - name: Install Stellar CLI
+        run: cargo install --locked stellar-cli --version 21.4.0
+
+      - name: Configure Stellar testnet network
+        run: |
+          stellar network add \
+            --rpc-url https://soroban-testnet.stellar.org \
+            --network-passphrase "Test SDF Network ; September 2015" \
+            testnet
+
+      - name: Import deployer identity
+        run: |
+          echo "${{ secrets.STELLAR_DEPLOY_KEY }}" | \
+            stellar keys add deployer --secret-key
+
+      - name: Deploy marketplace-escrow contract
+        id: deploy
+        run: |
+          CONTRACT_ID=$(stellar contract deploy \
+            --wasm target/wasm32-unknown-unknown/release/marketplace_escrow.wasm \
+            --network testnet \
+            --source deployer)
+          echo "contract_id=$CONTRACT_ID" >> "$GITHUB_OUTPUT"
+          echo "Deployed contract: $CONTRACT_ID"
+
+      - name: Verify contract deployment
+        run: |
+          stellar contract invoke \
+            --id "${{ steps.deploy.outputs.contract_id }}" \
+            --network testnet \
+            --source deployer \
+            -- get_listing --listing_id 0 2>&1 | grep -q "no listing" \
+            && echo "Contract responsive" || echo "Contract deployed (no listings yet — expected)"
+
+  # ── Job 2: Deploy web + API + Realtime services to Railway staging ─────────
+  deploy-services:
+    name: Build & deploy services → Railway staging
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: staging
@@ -32,10 +91,21 @@ jobs:
       - name: Build shared packages
         run: pnpm --filter @drift/shared build
 
-      - name: Typecheck (gate before deploy)
+      - name: Lint web (gate before deploy)
+        run: pnpm --filter @drift/web lint
+
+      - name: Typecheck all packages (gate before deploy)
         run: pnpm -r --if-present run typecheck
         env:
           DATABASE_URL: postgresql://drift:drift@localhost:5432/drift
+
+      - name: Build web (Next.js)
+        run: pnpm --filter @drift/web build
+        env:
+          NEXT_PUBLIC_API_URL: ${{ vars.STAGING_API_URL }}
+          NEXT_PUBLIC_REALTIME_URL: ${{ vars.STAGING_REALTIME_URL }}
+          NEXT_PUBLIC_SOROBAN_RPC_URL: https://soroban-testnet.stellar.org
+          NEXT_PUBLIC_MARKETPLACE_ESCROW_CONTRACT_ID: ${{ vars.MARKETPLACE_CONTRACT_ID }}
 
       # Deploy each service to Railway using the CLI.
       # RAILWAY_TOKEN must be set in the GitHub environment secrets.

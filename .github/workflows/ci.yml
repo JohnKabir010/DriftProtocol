@@ -188,11 +188,11 @@ jobs:
           path: apps/api/coverage/
           retention-days: 7
 
-  # ── Job 5: Frontend Tests ──────────────────────────────────────────────────
+  # ── Job 5: Frontend CI (install → lint → typecheck → build → test) ───────
   test-frontend:
-    name: Frontend Tests
+    name: Frontend CI
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     needs: typecheck
 
     steps:
@@ -211,8 +211,30 @@ jobs:
       - name: Build shared packages
         run: pnpm --filter @drift/shared build
 
+      - name: Lint web
+        run: pnpm --filter @drift/web lint
+
+      - name: Typecheck web
+        run: pnpm --filter @drift/web typecheck
+
+      - name: Build web (Next.js)
+        run: pnpm --filter @drift/web build
+        env:
+          NEXT_PUBLIC_API_URL: http://api:4000
+          NEXT_PUBLIC_REALTIME_URL: ws://realtime:2567
+          NEXT_PUBLIC_SOROBAN_RPC_URL: https://soroban-testnet.stellar.org
+          NEXT_PUBLIC_MARKETPLACE_ESCROW_CONTRACT_ID: CBMBWHUDVNXT76B5I6WK753KY2CNH7ZIU26H57JS5ZBSWTKJH4DUW5RP
+
       - name: Run frontend unit tests (Vitest)
         run: pnpm --filter @drift/web test
+
+      - name: Upload web build artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-build-ci
+          path: apps/web/.next/
+          retention-days: 3
 
   # ── Job 6: Build artifacts ─────────────────────────────────────────────────
   build:
