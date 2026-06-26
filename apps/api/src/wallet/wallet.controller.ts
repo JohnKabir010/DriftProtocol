@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Req, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
+import { Throttle } from "@nestjs/throttler";
 import { z } from "zod";
 import { WalletService } from "./wallet.service";
 import type { JwtPayload } from "../auth/jwt.strategy";
@@ -36,6 +37,7 @@ export class WalletController {
   }
 
   @Post("link")
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
   async linkWallet(@Body() body: unknown, @Req() req: { user: JwtPayload }) {
     const { publicKey, challenge, signature } = LinkBody.parse(body);
     await this.wallet.linkWallet(req.user.sub, publicKey, challenge, signature);
@@ -49,6 +51,7 @@ export class WalletController {
   }
 
   @Post("withdraw")
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
   async withdraw(@Body() body: unknown, @Req() req: { user: JwtPayload }) {
     const { toAddress, amount } = WithdrawBody.parse(body);
     return this.wallet.withdraw(req.user.playerId, toAddress, amount);
@@ -56,6 +59,7 @@ export class WalletController {
 
   /** Testnet only — mint 50 test USDC into the calling player's custodial wallet. */
   @Post("airdrop")
+  @Throttle({ default: { ttl: 60_000, limit: 3 } })
   airdrop(@Req() req: { user: JwtPayload }) {
     return this.wallet.airdrop(req.user.playerId);
   }
