@@ -61,13 +61,16 @@ const FEATURES = [
 ];
 
 function useLiveStats() {
-  const [stats, setStats] = useState({ racers: 47, races: 12, districts: 3 });
+  const [stats, setStats] = useState({ racers: 0, races: 0, districts: 0 });
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"}/v1/health`)
+    fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"}/v1/stats`)
       .then((r) => r.json())
-      .then(() => {
-        // Health endpoint confirms API is live; stats remain demo values until
-        // a dedicated /v1/stats endpoint is added in a future iteration.
+      .then((data: { totalPlayers?: number; liveRaces?: number; contestedDistricts?: number }) => {
+        setStats({
+          racers: data.totalPlayers ?? 0,
+          races: data.liveRaces ?? 0,
+          districts: data.contestedDistricts ?? 0,
+        });
       })
       .catch(() => {});
   }, []);
