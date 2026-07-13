@@ -31,6 +31,7 @@
     "@types/node": "^22.9.0",
     "@types/react": "^18.3.12",
     "@types/three": "^0.170.0",
+    "@vitest/coverage-v8": "^2.1.4",
     "autoprefixer": "^10.4.20",
     "eslint": "^8.57.0",
     "eslint-config-next": "^14.2.18",

@@ -232,8 +232,16 @@ jobs:
           NEXT_PUBLIC_SOROBAN_RPC_URL: https://soroban-testnet.stellar.org
           NEXT_PUBLIC_MARKETPLACE_ESCROW_CONTRACT_ID: CBMBWHUDVNXT76B5I6WK753KY2CNH7ZIU26H57JS5ZBSWTKJH4DUW5RP
 
-      - name: Run frontend unit tests (Vitest)
-        run: pnpm --filter @drift/web test
+      - name: Run frontend unit tests (Vitest, with coverage)
+        run: pnpm --filter @drift/web test -- --coverage
+
+      - name: Upload frontend coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-test-coverage
+          path: apps/web/coverage/
+          retention-days: 7
 
       - name: Upload web build artifact
         if: success()
