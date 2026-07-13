@@ -111,7 +111,7 @@ export async function callContractFunction(
     throw new Error(`Transaction failed (status: ${final.status})`);
   }
 
-  if (rpc.Api.isGetTransactionSuccess(final) && final.returnValue != null) {
+  if (final.returnValue != null) {
     return scValToNative(final.returnValue);
   }
   return undefined;
