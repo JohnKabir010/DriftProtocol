@@ -16,6 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: staging
+    outputs:
+      contract_id: ${{ steps.deploy.outputs.contract_id }}
     defaults:
       run:
         working-directory: packages/contracts
@@ -74,6 +76,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: staging
+    needs: deploy-contract
 
     steps:
       - uses: actions/checkout@v4
@@ -99,13 +102,21 @@ jobs:
         env:
           DATABASE_URL: postgresql://drift:drift@localhost:5432/drift
 
+      - name: Verify contract ID from deploy-contract job is available
+        run: |
+          if [ -z "${{ needs.deploy-contract.outputs.contract_id }}" ]; then
+            echo "deploy-contract produced no contract_id output — refusing to build frontend against a stale ID"
+            exit 1
+          fi
+          echo "Building frontend against freshly deployed contract: ${{ needs.deploy-contract.outputs.contract_id }}"
+
       - name: Build web (Next.js)
         run: pnpm --filter @drift/web build
         env:
           NEXT_PUBLIC_API_URL: ${{ vars.STAGING_API_URL }}
           NEXT_PUBLIC_REALTIME_URL: ${{ vars.STAGING_REALTIME_URL }}
           NEXT_PUBLIC_SOROBAN_RPC_URL: https://soroban-testnet.stellar.org
-          NEXT_PUBLIC_MARKETPLACE_ESCROW_CONTRACT_ID: ${{ vars.MARKETPLACE_CONTRACT_ID }}
+          NEXT_PUBLIC_MARKETPLACE_ESCROW_CONTRACT_ID: ${{ needs.deploy-contract.outputs.contract_id }}
 
       # Deploy each service to Railway using the CLI.
       # RAILWAY_TOKEN must be set in the GitHub environment secrets.
