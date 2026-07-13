@@ -16,6 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production
+    outputs:
+      contract_id: ${{ steps.deploy.outputs.contract_id }}
     defaults:
       run:
         working-directory: packages/contracts
@@ -38,11 +40,14 @@ jobs:
         run: cargo install --locked stellar-cli --features opt
 
       - name: Deploy marketplace-escrow contract
+        id: deploy
         run: |
-          stellar contract deploy \
+          CONTRACT_ID=$(stellar contract deploy \
             --wasm target/wasm32-unknown-unknown/release/marketplace_escrow.wasm \
             --source ${{ secrets.STELLAR_SECRET_KEY }} \
-            --network testnet
+            --network testnet)
+          echo "contract_id=$CONTRACT_ID" >> "$GITHUB_OUTPUT"
+          echo "Deployed contract: $CONTRACT_ID"
 
   # ── Job 2: Build and deploy frontend → Railway ─────────────────────────────
   deploy-frontend:
@@ -68,13 +73,21 @@ jobs:
       - name: Build shared packages
         run: pnpm --filter @drift/shared build
 
+      - name: Verify contract ID from deploy-contract job is available
+        run: |
+          if [ -z "${{ needs.deploy-contract.outputs.contract_id }}" ]; then
+            echo "deploy-contract produced no contract_id output — refusing to build frontend against a stale ID"
+            exit 1
+          fi
+          echo "Building frontend against freshly deployed contract: ${{ needs.deploy-contract.outputs.contract_id }}"
+
       - name: Build web (Next.js)
         run: pnpm --filter @drift/web build
         env:
-          NEXT_PUBLIC_CONTRACT_ID: ${{ secrets.NEXT_PUBLIC_CONTRACT_ID }}
+          NEXT_PUBLIC_CONTRACT_ID: ${{ needs.deploy-contract.outputs.contract_id }}
           NEXT_PUBLIC_SOROBAN_RPC_URL: ${{ secrets.NEXT_PUBLIC_SOROBAN_RPC_URL }}
           NEXT_PUBLIC_NETWORK_PASSPHRASE: ${{ secrets.NEXT_PUBLIC_NETWORK_PASSPHRASE }}
-          NEXT_PUBLIC_MARKETPLACE_ESCROW_CONTRACT_ID: ${{ secrets.NEXT_PUBLIC_CONTRACT_ID }}
+          NEXT_PUBLIC_MARKETPLACE_ESCROW_CONTRACT_ID: ${{ needs.deploy-contract.outputs.contract_id }}
           NEXT_PUBLIC_API_URL: ${{ vars.PRODUCTION_API_URL }}
           NEXT_PUBLIC_REALTIME_URL: ${{ vars.PRODUCTION_REALTIME_URL }}
 
