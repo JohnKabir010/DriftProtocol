@@ -2,11 +2,8 @@
 
 use super::*;
 use soroban_sdk::{
-    testutils::Address as _,
-    testutils::Events as _,
-    testutils::Ledger as _,
-    token::StellarAssetClient,
-    Address, Env,
+    testutils::Address as _, testutils::Events as _, testutils::Ledger as _,
+    token::StellarAssetClient, Address, Env,
 };
 
 fn setup(env: &Env) -> (Address, Address, Address, MarketplaceEscrowClient<'_>) {
@@ -34,9 +31,9 @@ fn list_and_buy_settles_atomically() {
     let seller = Address::generate(&env);
     let buyer = Address::generate(&env);
     StellarAssetClient::new(&env, &asset).mint(&seller, &1);
-    StellarAssetClient::new(&env, &usdc).mint(&buyer, &1_000_0000);
+    StellarAssetClient::new(&env, &usdc).mint(&buyer, &10_000_000);
 
-    let id = client.list(&seller, &asset, &1, &1_000_0000, &1000);
+    let id = client.list(&seller, &asset, &1, &10_000_000, &1000);
     client.buy(&buyer, &id);
 
     let asset_token = token::Client::new(&env, &asset);
@@ -60,9 +57,9 @@ fn cannot_double_buy() {
     let seller = Address::generate(&env);
     let buyer = Address::generate(&env);
     StellarAssetClient::new(&env, &asset).mint(&seller, &1);
-    StellarAssetClient::new(&env, &usdc).mint(&buyer, &10_000_0000);
+    StellarAssetClient::new(&env, &usdc).mint(&buyer, &100_000_000);
 
-    let id = client.list(&seller, &asset, &1, &1_000_0000, &1000);
+    let id = client.list(&seller, &asset, &1, &10_000_000, &1000);
     client.buy(&buyer, &id);
     client.buy(&buyer, &id); // must panic
 }
@@ -158,7 +155,7 @@ fn zero_amount_rejected() {
     let seller = Address::generate(&env);
     StellarAssetClient::new(&env, &asset).mint(&seller, &1);
 
-    client.list(&seller, &asset, &0, &1_000_0000, &100); // amount=0 → panic
+    client.list(&seller, &asset, &0, &10_000_000, &100); // amount=0 → panic
 }
 
 // ── Test 9: get_listing returns correct data ──────────────────────────────
@@ -190,11 +187,11 @@ fn get_listing_inactive_after_buy() {
     let (usdc, asset, _fee, client) = setup(&env);
 
     let seller = Address::generate(&env);
-    let buyer  = Address::generate(&env);
+    let buyer = Address::generate(&env);
     StellarAssetClient::new(&env, &asset).mint(&seller, &1);
-    StellarAssetClient::new(&env, &usdc).mint(&buyer, &2_000_0000);
+    StellarAssetClient::new(&env, &usdc).mint(&buyer, &20_000_000);
 
-    let id = client.list(&seller, &asset, &1, &1_000_0000, &300);
+    let id = client.list(&seller, &asset, &1, &10_000_000, &300);
     client.buy(&buyer, &id);
 
     let listing = client.get_listing(&id);
@@ -212,9 +209,9 @@ fn events_emitted_on_list_and_buy() {
     let seller = Address::generate(&env);
     let buyer = Address::generate(&env);
     StellarAssetClient::new(&env, &asset).mint(&seller, &1);
-    StellarAssetClient::new(&env, &usdc).mint(&buyer, &1_000_0000);
+    StellarAssetClient::new(&env, &usdc).mint(&buyer, &10_000_000);
 
-    let id = client.list(&seller, &asset, &1, &1_000_0000, &500);
+    let id = client.list(&seller, &asset, &1, &10_000_000, &500);
 
     // Verify: listing was created (side-effect: the buy succeeds, meaning
     // the escrow event did not corrupt any state).

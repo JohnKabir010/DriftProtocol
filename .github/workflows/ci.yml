@@ -98,10 +98,17 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
 
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: packages/contracts
+
+      - name: Check formatting (cargo fmt)
+        run: cargo fmt --all -- --check
+
+      - name: Clippy lint (warnings = errors)
+        run: cargo clippy --all-targets -- -D warnings
 
       - name: Run contract unit tests
         run: cargo test -- --nocapture

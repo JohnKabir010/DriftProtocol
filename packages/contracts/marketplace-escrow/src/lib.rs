@@ -15,7 +15,9 @@
 
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, token, Address, Env, Symbol};
+use soroban_sdk::{
+    contract, contractimpl, contracttype, symbol_short, token, Address, Env, Symbol,
+};
 
 #[derive(Clone)]
 #[contracttype]
@@ -66,7 +68,10 @@ impl MarketplaceEscrow {
         env.storage().instance().set(&DataKey::Usdc, &usdc);
         env.storage().instance().set(
             &DataKey::FeeConfig,
-            &FeeConfig { recipient: fee_recipient, fee_bps },
+            &FeeConfig {
+                recipient: fee_recipient,
+                fee_bps,
+            },
         );
         env.storage().instance().set(&DataKey::NextId, &0u64);
     }
@@ -101,7 +106,9 @@ impl MarketplaceEscrow {
             expiry_ledger: env.ledger().sequence() + ttl_ledgers,
             active: true,
         };
-        env.storage().persistent().set(&DataKey::Listing(id), &listing);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Listing(id), &listing);
 
         // Emit: ("escrow", "listed") → (listing_id, seller, price_usdc)
         env.events().publish(
