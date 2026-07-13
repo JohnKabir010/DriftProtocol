@@ -97,6 +97,23 @@ drift-protocol/                 # pnpm workspaces + Turborepo
 
 ---
 
+## Smart Contracts & CI/CD
+
+Quick map for reviewers — everything below is committed, tracked, and CI-verified on every push:
+
+| Requirement | Location |
+|---|---|
+| Contract source (`lib.rs`) | [`packages/contracts/marketplace-escrow/src/lib.rs`](packages/contracts/marketplace-escrow/src/lib.rs) |
+| Contract tests (`test.rs`) | [`packages/contracts/marketplace-escrow/src/test.rs`](packages/contracts/marketplace-escrow/src/test.rs) — 10 tests |
+| Contract folder structure | [`packages/contracts/`](packages/contracts/) (workspace: `Cargo.toml`, `Cargo.lock`, `Makefile`, `README.md`) + [`packages/contracts/marketplace-escrow/`](packages/contracts/marketplace-escrow/) (crate: `Cargo.toml`, `README.md`, `Makefile`) |
+| Frontend Soroban integration | [`apps/web/src/lib/soroban.ts`](apps/web/src/lib/soroban.ts), [`contract.ts`](apps/web/src/lib/contract.ts), [`stellar-sdk.ts`](apps/web/src/lib/stellar-sdk.ts), [`stellar-wallet.ts`](apps/web/src/lib/stellar-wallet.ts) — all built on `@stellar/stellar-sdk` |
+| Contract ↔ frontend function cross-reference | [`docs/CONTRACT_INTEGRATION.md`](docs/CONTRACT_INTEGRATION.md) |
+| CI (lint/typecheck/test/build, contracts + frontend + backend) | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — 6 jobs, contracts job runs `cargo fmt --check`, clippy, and `cargo test` |
+| CD — staging (contract deploy + Railway) | [`.github/workflows/deploy-staging.yml`](.github/workflows/deploy-staging.yml) — deploys the Soroban contract to testnet, then builds/deploys web + API + realtime against the freshly deployed contract ID |
+| CD — production (contract deploy + Railway) | [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) — same pattern on push to `main` |
+
+---
+
 ## Tech Stack
 
 | Layer | Technology |
