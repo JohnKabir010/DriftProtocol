@@ -10,6 +10,9 @@ coverage/
 .DS_Store
 # Soroban/Rust
 packages/contracts/target/
+# Auto-generated per-test ledger/auth snapshots (soroban-sdk debug dumps,
+# regenerated on every `cargo test` run — not consumed by the test suite).
+packages/contracts/**/test_snapshots/
 
 # Deployment / infra
 infra/nginx/certs/
